@@ -32,26 +32,12 @@ tag-track is a specialized CLI tool for discovering, identifying, refreshing, an
 
 # Installation
 
-Download the precompiled binary for your operating system and architecture from [GitHub Releases](https://github.com/alexgorbatchev/tag-track-cli/releases/latest):
+Download the precompiled binary for your platform from [GitHub Releases](https://github.com/alexgorbatchev/tag-track-cli/releases/latest):
 
-### macOS (Apple Silicon / arm64)
 ```bash
-curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_darwin_arm64.tar.gz | tar -xz -C ~/.local/bin tag-track
-```
-
-### macOS (Intel / amd64)
-```bash
-curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_darwin_amd64.tar.gz | tar -xz -C ~/.local/bin tag-track
-```
-
-### Linux (x86_64 / amd64)
-```bash
-curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_linux_amd64.tar.gz | tar -xz -C ~/.local/bin tag-track
-```
-
-### Linux (arm64)
-```bash
-curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_linux_arm64.tar.gz | tar -xz -C ~/.local/bin tag-track
+curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_darwin_arm64.tar.gz | tar -xz
+chmod +x tag-track
+mv tag-track ~/.local/bin/
 ```
 
 # Quick Start
