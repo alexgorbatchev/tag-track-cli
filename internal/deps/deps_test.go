@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 func TestParseVersionOutput(t *testing.T) {

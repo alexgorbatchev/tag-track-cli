@@ -18,7 +18,7 @@ import (
 	"github.com/alexgorbatchev/gochromaprint"
 	"github.com/alexgorbatchev/godeps"
 	"github.com/alexgorbatchev/goshazam"
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 // TrackMetadataResult contains normalized track metadata and artwork URL.
@@ -557,7 +557,7 @@ func (c *Client) FetchFromMusicBrainz(ctx context.Context, query, expectedTitle 
 	if err != nil {
 		return nil, fmt.Errorf("creating MusicBrainz request: %w", err)
 	}
-	req.Header.Set("User-Agent", "tag-track-cli/1.0 (https://github.com/dj/tag-track-cli)")
+	req.Header.Set("User-Agent", "tag-track-cli/1.0 (https://github.com/alexgorbatchev/tag-track-cli)")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 func createDummyAudioFile(t *testing.T, dir, filename string) string {

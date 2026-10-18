@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 // AppName is the application name used for managed directories and XDG storage.

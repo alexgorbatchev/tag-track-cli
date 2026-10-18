@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 type mockTransport func(req *http.Request) (*http.Response, error)

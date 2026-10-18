@@ -14,11 +14,11 @@ import (
 	"time"
 
 	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree"
-	"github.com/dj/tag-track-cli/internal/cache"
-	"github.com/dj/tag-track-cli/internal/deps"
-	"github.com/dj/tag-track-cli/internal/metadata"
-	"github.com/dj/tag-track-cli/internal/progress"
-	"github.com/dj/tag-track-cli/internal/spinner"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
+	"github.com/alexgorbatchev/tag-track-cli/internal/metadata"
+	"github.com/alexgorbatchev/tag-track-cli/internal/progress"
+	"github.com/alexgorbatchev/tag-track-cli/internal/spinner"
 	"github.com/spf13/cobra"
 )
 

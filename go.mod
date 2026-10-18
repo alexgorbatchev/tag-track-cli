@@ -1,4 +1,4 @@
-module github.com/dj/tag-track-cli
+module github.com/alexgorbatchev/tag-track-cli
 
 go 1.26.2
 

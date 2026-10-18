@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
 )
 
 // NormalizeCoverArtToSquare center-crops and scales any input image to a 1:1 square (1400x1400) JPEG.
