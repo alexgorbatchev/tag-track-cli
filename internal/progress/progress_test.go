@@ -34,7 +34,7 @@ func TestNewReporter_UnixSocket(t *testing.T) {
 		_ = json.NewDecoder(conn).Decode(&received)
 	}()
 
-	rep, err := NewReporter(context.Background(), "unix://"+sockPath)
+	rep, err := NewReporter(context.Background(), "unix://"+sockPath, "")
 	if err != nil {
 		t.Fatalf("creating unix reporter: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestNewReporter_TCPSocket(t *testing.T) {
 		_ = json.NewDecoder(conn).Decode(&received)
 	}()
 
-	rep, err := NewReporter(context.Background(), "tcp://"+l.Addr().String())
+	rep, err := NewReporter(context.Background(), "tcp://"+l.Addr().String(), "")
 	if err != nil {
 		t.Fatalf("creating tcp reporter: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestNewReporter_FD(t *testing.T) {
 	}
 	defer r.Close()
 
-	rep, err := NewReporter(context.Background(), "fd://"+string(os.PathSeparator)+".."+string(os.PathSeparator)+"3")
+	rep, err := NewReporter(context.Background(), "fd://"+string(os.PathSeparator)+".."+string(os.PathSeparator)+"3", "")
 	if err == nil && rep != nil {
 		_ = rep.Close()
 	}
@@ -109,35 +109,35 @@ func TestNewReporter_FD(t *testing.T) {
 
 func TestNewReporter_InvalidTarget(t *testing.T) {
 	t.Run("empty target", func(t *testing.T) {
-		_, err := NewReporter(context.Background(), "")
+		_, err := NewReporter(context.Background(), "", "")
 		if err == nil {
 			t.Fatal("expected error on empty target")
 		}
 	})
 
 	t.Run("unsupported scheme", func(t *testing.T) {
-		_, err := NewReporter(context.Background(), "http://example.com/stream")
+		_, err := NewReporter(context.Background(), "http://example.com/stream", "")
 		if err == nil {
 			t.Fatal("expected error on http scheme")
 		}
 	})
 
 	t.Run("invalid fd", func(t *testing.T) {
-		_, err := NewReporter(context.Background(), "fd://notanumber")
+		_, err := NewReporter(context.Background(), "fd://notanumber", "")
 		if err == nil {
 			t.Fatal("expected error on invalid fd")
 		}
 	})
 
 	t.Run("unreachable unix", func(t *testing.T) {
-		_, err := NewReporter(context.Background(), "unix:///nonexistent/path/here.sock")
+		_, err := NewReporter(context.Background(), "unix:///nonexistent/path/here.sock", "")
 		if err == nil {
 			t.Fatal("expected dial error")
 		}
 	})
 
 	t.Run("unreachable tcp", func(t *testing.T) {
-		_, err := NewReporter(context.Background(), "tcp://127.0.0.1:54321")
+		_, err := NewReporter(context.Background(), "tcp://127.0.0.1:54321", "")
 		if err == nil {
 			t.Fatal("expected dial error")
 		}
@@ -190,14 +190,14 @@ func TestReporter_NilSafe(t *testing.T) {
 }
 
 func TestNewReporter_StdoutStderr(t *testing.T) {
-	rOut, err := NewReporter(context.Background(), "stdout")
+	rOut, err := NewReporter(context.Background(), "stdout", "")
 	if err != nil {
 		t.Fatalf("stdout reporter failed: %v", err)
 	}
 	_ = rOut.Emit(Event{Type: EventPhaseStart})
 	_ = rOut.Close()
 
-	rErr, err := NewReporter(context.Background(), "stderr")
+	rErr, err := NewReporter(context.Background(), "stderr", "")
 	if err != nil {
 		t.Fatalf("stderr reporter failed: %v", err)
 	}

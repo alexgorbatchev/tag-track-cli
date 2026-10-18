@@ -43,6 +43,7 @@ var (
 	verbose        bool
 	progressTarget string
 	progressSocket string
+	jobID          string
 	autoInstall    bool
 
 	stdinReader = io.Reader(os.Stdin)
@@ -104,6 +105,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
 	rootCmd.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events (e.g. unix:///path/to.sock, tcp://127.0.0.1:9099, fd://3, stdout, stderr)")
 	rootCmd.Flags().StringVar(&progressSocket, "progress-socket", "", "Shorthand alias for --progress-target")
+	rootCmd.PersistentFlags().StringVar(&jobID, "job-id", "", "Job ID included in progress events (generated automatically when omitted)")
 	_ = rootCmd.Flags().MarkHidden("progress-socket")
 	rootCmd.Flags().BoolVar(&autoInstall, "auto-install", false, "Automatically install missing dependencies without prompting")
 
@@ -667,7 +669,7 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 	resolvedTarget := progress.ResolveTargetURI(progressTarget, progressSocket, os.Getenv("TAG_TRACK_PROGRESS_TARGET"))
 	var rep *progress.Reporter
 	if resolvedTarget != "" {
-		r, err := progress.NewReporter(ctx, resolvedTarget)
+		r, err := progress.NewReporter(ctx, resolvedTarget, jobID)
 		if err != nil {
 			return fileCommandFailure(files, fmt.Errorf("initializing progress reporter: %w", err))
 		}
@@ -804,6 +806,10 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 				fmt.Println("  [DRY RUN - file was not modified]")
 				fmt.Println()
 			}
+			_ = rep.Emit(progress.Event{
+				Type: progress.EventComplete, Phase: "complete", Step: i + 1, TotalSteps: len(files),
+				Message: "metadata preview complete",
+			})
 			continue
 		}
 

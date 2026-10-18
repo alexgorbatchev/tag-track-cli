@@ -2,10 +2,12 @@ package progress
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -19,13 +21,13 @@ import (
 type EventType string
 
 const (
-	EventPhaseStart         EventType = "phase_start"
-	EventMetadataFound      EventType = "metadata_found"
-	EventArtworkDownloaded  EventType = "artwork_downloaded"
-	EventTagged             EventType = "tagged"
-	EventProgress           EventType = "progress"
-	EventComplete           EventType = "complete"
-	EventError              EventType = "error"
+	EventPhaseStart        EventType = "phase_start"
+	EventMetadataFound     EventType = "metadata_found"
+	EventArtworkDownloaded EventType = "artwork_downloaded"
+	EventTagged            EventType = "tagged"
+	EventProgress          EventType = "progress"
+	EventComplete          EventType = "complete"
+	EventError             EventType = "error"
 )
 
 // MetadataInfo describes resolved track metadata and artwork information.
@@ -53,13 +55,15 @@ type ResultInfo struct {
 
 // Event represents an atomic structured telemetry/progress update sent over the socket.
 type Event struct {
+	JobID      string        `json:"job_id"`
+	Sequence   uint64        `json:"sequence"`
 	Timestamp  time.Time     `json:"timestamp"`
 	Type       EventType     `json:"type"`
 	Phase      string        `json:"phase,omitempty"`
 	Step       int           `json:"step,omitempty"`
 	TotalSteps int           `json:"total_steps,omitempty"`
 	Message    string        `json:"message,omitempty"`
-	Percent    float64       `json:"percent,omitempty"`
+	Percent    float64       `json:"percent"`
 	Metadata   *MetadataInfo `json:"metadata,omitempty"`
 	Result     *ResultInfo   `json:"result,omitempty"`
 	Error      string        `json:"error,omitempty"`
@@ -71,6 +75,9 @@ type Reporter struct {
 	closer     io.Closer
 	encoder    *json.Encoder
 	shouldSkip bool
+	jobID      string
+	sequence   uint64
+	percent    float64
 }
 
 // ParseTarget parses a target string into a normalized scheme and address/path.
@@ -109,7 +116,7 @@ func ParseTarget(raw string) (scheme, address string, err error) {
 }
 
 // NewReporter connects to the specified progress target and returns a Reporter.
-func NewReporter(ctx context.Context, target string) (*Reporter, error) {
+func NewReporter(ctx context.Context, target, jobID string) (*Reporter, error) {
 	scheme, address, err := ParseTarget(target)
 	if err != nil {
 		return nil, err
@@ -157,6 +164,7 @@ func NewReporter(ctx context.Context, target string) (*Reporter, error) {
 	return &Reporter{
 		closer:  closer,
 		encoder: json.NewEncoder(writer),
+		jobID:   jobID,
 	}, nil
 }
 
@@ -170,8 +178,39 @@ func (r *Reporter) Emit(event Event) error {
 
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
+	} else {
+		event.Timestamp = event.Timestamp.UTC()
 	}
-	return r.encoder.Encode(event)
+	if r.jobID == "" {
+		r.jobID = rand.Text()
+	}
+	event.JobID = r.jobID
+	event.Sequence = r.sequence + 1
+	event.Percent = r.completion(event)
+	if err := r.encoder.Encode(event); err != nil {
+		return err
+	}
+	r.sequence = event.Sequence
+	r.percent = event.Percent
+	return nil
+}
+
+func (r *Reporter) completion(event Event) float64 {
+	const complete = 100.0
+	percent := event.Percent
+	if math.IsNaN(percent) || math.IsInf(percent, 0) {
+		percent = r.percent
+	}
+	validStep := event.Step > 0 && event.Step <= event.TotalSteps
+	if event.Type == EventComplete {
+		percent = complete
+		if validStep {
+			percent = complete * float64(event.Step) / float64(event.TotalSteps)
+		}
+	} else if event.Type == EventPhaseStart && validStep {
+		percent = max(percent, complete*float64(event.Step-1)/float64(event.TotalSteps))
+	}
+	return min(complete, max(r.percent, percent))
 }
 
 // Close closes any underlying network connection or file descriptor.

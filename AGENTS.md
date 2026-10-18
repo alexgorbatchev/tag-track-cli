@@ -29,6 +29,7 @@ Go CLI tool for inspecting, identifying, updating, and embedding normalized meta
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of bracket video IDs `[...]` and illegal filesystem characters.
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local mock transports, audio operations use synthetic test audio files, and zero unit tests depend on the live internet.
 - **Output Formatting:** Plain text without emojis. Dual-mode output support via `AGENT=1`.
+- **Progress Envelope:** Every event includes `job_id`, increasing `sequence` (starting at 1 per reporter), UTC `timestamp`, and numeric overall `percent` from 0 to 100. Accept caller-supplied `--job-id` or generate one. For multiple files, calculate completion across the batch. When delegated by fetch-track, its parent reporter owns the outward job ID, sequence, and overall acquisition percentage.
 - **Help Screens:** CLI help output (`--help`) must display an aligned hierarchical tree view with `├─` and `╰─` glyphs powered by `github.com/alexgorbatchev/cobra-help-tree`.
 - **Square Artwork Normalization:** Always ensure embedded album art is strictly 1:1 square (1400x1400) by applying center-crop and resize filters (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`).
 - **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD`) and embed provenance comments (`Source: ... | Metadata: ... | Tagged: ...`).
