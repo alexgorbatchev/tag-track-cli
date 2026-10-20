@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,21 @@ func DownloadArtwork(ctx context.Context, artworkURL, tmpDir string, cacheInst *
 	if strings.TrimSpace(artworkURL) == "" {
 		return "", fmt.Errorf("empty artwork URL")
 	}
+	parsed, err := url.Parse(artworkURL)
+	if err != nil {
+		return "", fmt.Errorf("parsing artwork location: %w", err)
+	}
+	if parsed.Scheme == "" {
+		data, err := os.ReadFile(artworkURL)
+		if err != nil {
+			return "", fmt.Errorf("reading artwork file: %w", err)
+		}
+		path := filepath.Join(tmpDir, "local_cover"+filepath.Ext(artworkURL))
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			return "", fmt.Errorf("copying artwork file: %w", err)
+		}
+		return path, nil
+	}
 
 	if cacheInst != nil {
 		if cachedPath, found := cacheInst.GetFile("artworks", artworkURL, 30*24*time.Hour); found {
@@ -78,8 +94,11 @@ func DownloadArtwork(ctx context.Context, artworkURL, tmpDir string, cacheInst *
 	}
 
 	imgBytes, err := io.ReadAll(resp.Body)
-	if err != nil || len(imgBytes) == 0 {
+	if err != nil {
 		return "", fmt.Errorf("reading artwork payload: %w", err)
+	}
+	if len(imgBytes) == 0 {
+		return "", fmt.Errorf("empty artwork payload")
 	}
 
 	if cacheInst != nil {
@@ -119,22 +138,31 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	}
 
 	if isVerbose {
-		fmt.Printf("tagging: %s\n", filePath)
+		fmt.Fprintf(os.Stderr, "tagging: %s\n", filePath)
 		if metadata.CoverArtURL != "" {
-			fmt.Printf("coverart: downloading %s\n", metadata.CoverArtURL)
+			fmt.Fprintf(os.Stderr, "coverart: downloading %s\n", metadata.CoverArtURL)
 		}
 	}
 
-	_, errStat := os.Stat(".tmp")
-	dotTmpExisted := !os.IsNotExist(errStat)
-
-	tmpDir := ".tmp"
-	_ = os.MkdirAll(tmpDir, 0755)
+	_, statErr := os.Stat(".tmp")
+	if err := os.MkdirAll(".tmp", 0755); err != nil {
+		return filePath, fmt.Errorf("creating temporary directory: %w", err)
+	}
+	if os.IsNotExist(statErr) {
+		defer os.Remove(".tmp") // Remove only when empty; concurrent operations own their files.
+	}
+	tmpDir, err := os.MkdirTemp(".tmp", "tag-")
+	if err != nil {
+		return filePath, fmt.Errorf("creating tagging directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir) // Best-effort cleanup of files owned by this operation.
 
 	var coverTempPath string
 	if metadata.CoverArtURL != "" {
 		if p, err := DownloadArtwork(ctx, metadata.CoverArtURL, tmpDir, cacheInst); err == nil {
 			coverTempPath = p
+		} else if metadata.RequireArtwork {
+			return filePath, err
 		}
 
 		if coverTempPath == "" {
@@ -161,6 +189,8 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		if coverTempPath != "" {
 			if squareCover, errNorm := NormalizeCoverArtToSquare(ctx, coverTempPath, tmpDir); errNorm == nil {
 				coverTempPath = squareCover
+			} else if metadata.RequireArtwork {
+				return filePath, fmt.Errorf("normalizing artwork: %w", errNorm)
 			}
 		}
 	}
@@ -173,9 +203,6 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 			_ = os.Remove(coverTempPath)
 		}
 		_ = os.Remove(tempOutPath)
-		if !dotTmpExisted {
-			_ = os.RemoveAll(".tmp")
-		}
 	}()
 
 	var cleanFilename string
@@ -208,6 +235,9 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	}
 
 	commentTag := fmt.Sprintf("Source: %s | Metadata: %s | Tagged: %s", sourceURL, metaProvider, provenanceDate)
+	if metadata.Comment != nil {
+		commentTag = *metadata.Comment
+	}
 
 	args := []string{
 		"-v", "quiet",
@@ -234,37 +264,27 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 			)
 		}
 	} else {
-		args = append(args, "-map", "0:a:0", "-c:a", "copy")
+		args = append(args, "-map", "0:a:0", "-map", "0:v?", "-c", "copy")
 		if ext == ".mp3" {
 			args = append(args, "-id3v2_version", "3")
 		}
 	}
 
-	if metadata.Title != "" {
-		args = append(args, "-metadata", fmt.Sprintf("title=%s", metadata.Title))
-	}
-	if metadata.Artist != "" {
-		args = append(args, "-metadata", fmt.Sprintf("artist=%s", metadata.Artist))
-	}
-	if metadata.Album != "" {
-		args = append(args, "-metadata", fmt.Sprintf("album=%s", metadata.Album))
-	}
-	if dateTag != "" {
-		args = append(args, "-metadata", fmt.Sprintf("date=%s", dateTag))
-		args = append(args, "-metadata", fmt.Sprintf("year=%s", dateTag))
-	}
-	if metadata.Genre != "" {
-		args = append(args, "-metadata", fmt.Sprintf("genre=%s", metadata.Genre))
-	}
+	args = append(args, "-metadata", fmt.Sprintf("title=%s", metadata.Title))
+	args = append(args, "-metadata", fmt.Sprintf("artist=%s", metadata.Artist))
+	args = append(args, "-metadata", fmt.Sprintf("album=%s", metadata.Album))
+	args = append(args, "-metadata", fmt.Sprintf("date=%s", dateTag))
+	args = append(args, "-metadata", fmt.Sprintf("year=%s", dateTag))
+	args = append(args, "-metadata", fmt.Sprintf("genre=%s", metadata.Genre))
 	args = append(args, "-metadata", fmt.Sprintf("comment=%s", commentTag))
 
 	args = append(args, tempOutPath)
 
 	if isVerbose {
 		if coverTempPath != "" {
-			fmt.Printf("ffmpeg: embedding tags + square 1400x1400 artwork\n")
+			fmt.Fprintf(os.Stderr, "ffmpeg: embedding tags + square 1400x1400 artwork\n")
 		} else {
-			fmt.Printf("ffmpeg: embedding tags\n")
+			fmt.Fprintf(os.Stderr, "ffmpeg: embedding tags\n")
 		}
 	}
 
@@ -293,10 +313,6 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 			return filePath, fmt.Errorf("writing final output track %s: %w", finalOutPath, errWrite)
 		}
 		_ = os.Remove(tempOutPath)
-	}
-
-	if !dotTmpExisted {
-		_ = os.RemoveAll(".tmp")
 	}
 
 	return finalOutPath, nil

@@ -1,6 +1,6 @@
 ---
 created_on: 2026-09-03 04:00
-last_modified: 2026-09-03 04:00
+last_modified: 2026-10-19 17:38
 status: current
 ---
 
@@ -23,6 +23,8 @@ Go CLI tool for inspecting, identifying, updating, and embedding normalized meta
 - **Temporary Files:** Temporary file operations use `.tmp/` within the project root.
 
 ## Conventions
+- **Machine API:** `--json` returns a batch with per-file results for inspect, update, and artwork embedding, including partial failures and a nonzero exit status. Dependencies and self-upgrade return structured JSON envelopes. Diagnostics go to stderr.
+- **Explicit Tag Edits:** Supplied empty tag flags clear their values. An explicit comment replaces generated provenance; artwork-only edits preserve existing comments. Explicit artwork accepts HTTP URLs or local paths and must fail if loading or normalization fails. `--refresh` bypasses metadata caches.
 - **Zero-Transcode Policy:** Never lossily re-encode MP3, OPUS, or FLAC streams to AAC. Always use `-c:a copy` during metadata tagging to preserve the original bitstream byte-for-byte.
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of bracket video IDs `[...]` and illegal filesystem characters.
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local mock transports, audio operations use synthetic test audio files, and zero unit tests depend on the live internet.

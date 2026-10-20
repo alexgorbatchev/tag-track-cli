@@ -27,9 +27,11 @@ type TrackMetadataResult struct {
 	Artist         string    `json:"artist"`
 	Album          string    `json:"album"`
 	Genre          string    `json:"genre"`
+	Comment        *string   `json:"comment,omitempty"`
 	ReleaseDate    string    `json:"releaseDate,omitempty"`
 	ReleaseYear    string    `json:"releaseYear"`
 	CoverArtURL    string    `json:"coverArtUrl,omitempty"`
+	RequireArtwork bool      `json:"-"`
 	Source         string    `json:"source"` // AcoustID / MusicBrainz, Shazam API, iTunes API, MusicBrainz API, Filename Fallback
 	AudioSourceURL string    `json:"audioSourceUrl,omitempty"`
 	FetchedAt      time.Time `json:"fetchedAt,omitempty"`
@@ -695,7 +697,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 	var cachedRes TrackMetadataResult
 	if c.Cache != nil && c.Cache.Get("metadata", cacheKey, &cachedRes) {
 		if isVerbose {
-			fmt.Printf("metadata cache hit for %q\n", searchQuery)
+			fmt.Fprintf(os.Stderr, "metadata cache hit for %q\n", searchQuery)
 		}
 		if !strings.HasSuffix(cachedRes.Source, "[cached]") {
 			cachedRes.Source = cachedRes.Source + " [cached]"
@@ -707,7 +709,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 	if audioFilePath != "" {
 		if _, err := os.Stat(audioFilePath); err == nil {
 			if isVerbose {
-				fmt.Printf("metadata acoustic: probing %s via Shazam\n", audioFilePath)
+				fmt.Fprintf(os.Stderr, "metadata acoustic: probing %s via Shazam\n", audioFilePath)
 			}
 			if res, err := c.FetchFromShazam(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
 				if res.CoverArtURL == "" {
@@ -726,9 +728,9 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 					}
 				}
 				if isVerbose {
-					fmt.Printf("shazam match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+					fmt.Fprintf(os.Stderr, "shazam match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 					if res.CoverArtURL != "" {
-						fmt.Printf("shazam artwork: %s\n", res.CoverArtURL)
+						fmt.Fprintf(os.Stderr, "shazam artwork: %s\n", res.CoverArtURL)
 					}
 				}
 				if c.Cache != nil {
@@ -736,7 +738,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 				}
 				return *res
 			} else if isVerbose {
-				fmt.Printf("shazam: no match (%v)\nmetadata acoustic: probing %s via AcoustID\n", err, audioFilePath)
+				fmt.Fprintf(os.Stderr, "shazam: no match (%v)\nmetadata acoustic: probing %s via AcoustID\n", err, audioFilePath)
 			}
 
 			if res, err := c.FetchFromAcoustID(ctx, audioFilePath); err == nil && res.Title != "" && res.Artist != "" {
@@ -756,9 +758,9 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 					}
 				}
 				if isVerbose {
-					fmt.Printf("acoustid match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+					fmt.Fprintf(os.Stderr, "acoustid match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 					if res.CoverArtURL != "" {
-						fmt.Printf("acoustid artwork: %s\n", res.CoverArtURL)
+						fmt.Fprintf(os.Stderr, "acoustid artwork: %s\n", res.CoverArtURL)
 					}
 				}
 				if c.Cache != nil {
@@ -766,7 +768,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 				}
 				return *res
 			} else if isVerbose {
-				fmt.Printf("acoustid: no match (%v)\n", err)
+				fmt.Fprintf(os.Stderr, "acoustid: no match (%v)\n", err)
 			}
 		}
 	}
@@ -783,15 +785,15 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 	search = strings.ReplaceAll(search, "_", " ")
 
 	if isVerbose {
-		fmt.Printf("metadata search: %q\n", search)
-		fmt.Printf("itunes: searching\n")
+		fmt.Fprintf(os.Stderr, "metadata search: %q\n", search)
+		fmt.Fprintf(os.Stderr, "itunes: searching\n")
 	}
 
 	if res, err := c.FetchFromITunes(ctx, search, expectedTitle); err == nil && res.Title != "" && res.Artist != "" {
 		if isVerbose {
-			fmt.Printf("itunes match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+			fmt.Fprintf(os.Stderr, "itunes match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 			if res.CoverArtURL != "" {
-				fmt.Printf("itunes artwork: %s\n", res.CoverArtURL)
+				fmt.Fprintf(os.Stderr, "itunes artwork: %s\n", res.CoverArtURL)
 			}
 		}
 		if c.Cache != nil {
@@ -799,14 +801,14 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 		}
 		return *res
 	} else if isVerbose {
-		fmt.Printf("itunes: no match\nmusicbrainz: searching\n")
+		fmt.Fprintf(os.Stderr, "itunes: no match\nmusicbrainz: searching\n")
 	}
 
 	if res, err := c.FetchFromMusicBrainz(ctx, search, expectedTitle); err == nil && res.Title != "" {
 		if isVerbose {
-			fmt.Printf("musicbrainz match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
+			fmt.Fprintf(os.Stderr, "musicbrainz match: %q (Album: %s, %s)\n", res.Artist+" - "+res.Title, res.Album, res.ReleaseYear)
 			if res.CoverArtURL != "" {
-				fmt.Printf("coverart archive: %s\n", res.CoverArtURL)
+				fmt.Fprintf(os.Stderr, "coverart archive: %s\n", res.CoverArtURL)
 			}
 		}
 		if c.Cache != nil {
@@ -814,7 +816,7 @@ func (c *Client) ResolveTrackMetadata(ctx context.Context, audioFilePath, search
 		}
 		return *res
 	} else if isVerbose {
-		fmt.Printf("musicbrainz: no match\nmetadata fallback: filename raw\n")
+		fmt.Fprintf(os.Stderr, "musicbrainz: no match\nmetadata fallback: filename raw\n")
 	}
 
 	artist := fallbackArtist
