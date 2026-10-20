@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dj/tag-track-cli/internal/cache"
-	"github.com/dj/tag-track-cli/internal/deps"
-	"github.com/dj/tag-track-cli/internal/metadata"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
+	"github.com/alexgorbatchev/tag-track-cli/internal/metadata"
 )
 
 func runTagJSON(t *testing.T, args ...string) (tagBatch, error) {

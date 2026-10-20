@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/dj/tag-track-cli/internal/deps"
+	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
 
 	"github.com/spf13/cobra"
 )

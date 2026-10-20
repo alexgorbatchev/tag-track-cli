@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/dj/tag-track-cli/internal/metadata"
+	"github.com/alexgorbatchev/tag-track-cli/internal/metadata"
 	"image"
 	"image/png"
 	"os"

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/alexgorbatchev/godeps"
-	"github.com/dj/tag-track-cli/internal/deps"
+	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
 )
 
 func TestAdminJSONDependencies(t *testing.T) {
