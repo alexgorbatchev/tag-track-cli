@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -23,7 +24,8 @@ import (
 )
 
 var (
-	version = "dev"
+	version    = "dev"
+	jsonOutput bool
 
 	outDir         string
 	inPlace        bool
@@ -75,10 +77,11 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 				return err
 			}
 
-			return processFiles(cmd.Context(), files)
+			return processFiles(cmd.Context(), files, changedTagFlags(cmd))
 		},
 	}
 
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output structured results as JSON")
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
 	rootCmd.Flags().StringVarP(&outDir, "out-dir", "o", "", "Output directory for tagged audio tracks (default: overwrite in-place or current directory)")
@@ -125,7 +128,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			if err := ensureDependencies(cmd.Context()); err != nil {
 				return err
 			}
-			return processFiles(cmd.Context(), files)
+			return processFiles(cmd.Context(), files, changedTagFlags(cmd))
 		},
 	}
 	copyFlags(rootCmd, trackUpdateCmd)
@@ -212,6 +215,9 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Verify required external binary dependencies (ffmpeg, ffprobe)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "inspect")
+			}
 			isAgent := deps.IsAgentMode()
 			reports, err := deps.VerifyDependencies(cmd.Context())
 
@@ -257,6 +263,9 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Install missing external dependencies (ffmpeg, ffprobe)",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "install")
+			}
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
@@ -289,6 +298,9 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Update external dependencies to their latest versions",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runDepsJSON(cmd, args, "update")
+			}
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
@@ -321,6 +333,9 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Upgrade tag-track CLI binary to the latest released version",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if jsonOutput {
+				return runUpgradeJSON(cmd, version)
+			}
 			isAgent := deps.IsAgentMode()
 			if !isAgent {
 				fmt.Printf("Checking for newer tag-track release (current version: %s)...\n", version)
@@ -436,20 +451,20 @@ func ensureDependencies(ctx context.Context) error {
 	}
 
 	if autoInstall {
-		if !deps.IsAgentMode() {
+		if !deps.IsAgentMode() && !jsonOutput {
 			fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
 		}
 		installed, installErr := deps.InstallMissingDependencies(ctx)
 		if installErr != nil {
 			return fmt.Errorf("auto-installing dependencies: %w", installErr)
 		}
-		if len(installed) > 0 && !deps.IsAgentMode() {
+		if len(installed) > 0 && !deps.IsAgentMode() && !jsonOutput {
 			fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 		}
 		return nil
 	}
 
-	if !deps.IsAgentMode() {
+	if !deps.IsAgentMode() && !jsonOutput {
 		reader := bufio.NewReader(stdinReader)
 		fmt.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
 		ans, _ := reader.ReadString('\n')
@@ -471,10 +486,20 @@ func ensureDependencies(ctx context.Context) error {
 }
 
 func inspectFiles(ctx context.Context, files []string) error {
+	batch := tagBatch{Status: "success", Results: []tagResult{}}
 	isAgent := deps.IsAgentMode()
 
 	for _, file := range files {
 		info, err := metadata.InspectAudioTrack(ctx, file, nil)
+		if jsonOutput {
+			r := tagResult{InputFile: file, Status: "success", Inspection: info}
+			if err != nil {
+				r.Status = "error"
+				r.Error = err.Error()
+			}
+			batch.Results = append(batch.Results, r)
+			continue
+		}
 		if err != nil {
 			if isAgent {
 				fmt.Printf("file: %s\nstatus: error\nerror: %v\n", file, err)
@@ -550,11 +575,15 @@ func inspectFiles(ctx context.Context, files []string) error {
 		}
 	}
 
+	if jsonOutput {
+		return batch.write()
+	}
 	return nil
 }
 
 func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) error {
-	isAgent := deps.IsAgentMode()
+	batch := tagBatch{Status: "success", Results: []tagResult{}}
+	isAgent := deps.IsAgentMode() || jsonOutput
 	cacheInst, _ := cache.New(!noCache)
 
 	for _, file := range files {
@@ -564,8 +593,9 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 		}
 
 		meta := metadata.TrackMetadataResult{
-			CoverArtURL: artURL,
-			Source:      "Direct Artwork",
+			CoverArtURL:    artURL,
+			RequireArtwork: true,
+			Source:         "Direct Artwork",
 		}
 
 		// Read existing tags if present so they aren't lost
@@ -576,6 +606,7 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 			meta.ReleaseDate = existing.Date
 			meta.ReleaseYear = existing.Date
 			meta.Genre = existing.Genre
+			meta.Comment = &existing.Comment
 		}
 
 		if !isAgent {
@@ -584,6 +615,10 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 
 		outPath, err := metadata.ApplyMetadataToLocalTrack(ctx, file, meta, targetOutDir, verbose, cacheInst)
 		if err != nil {
+			if jsonOutput {
+				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: err.Error()})
+				continue
+			}
 			if isAgent {
 				fmt.Printf("file: %s\nstatus: error\nerror: %v\n", file, err)
 			} else {
@@ -596,6 +631,10 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 			_ = os.Remove(file)
 		}
 
+		if jsonOutput {
+			batch.Results = append(batch.Results, tagResult{InputFile: file, OutputFile: outPath, Status: "success", Metadata: &meta})
+			continue
+		}
 		if isAgent {
 			fmt.Printf("file: %s\nartwork: %s\nstatus: ok\noutput: %s\n", file, artURL, outPath)
 		} else {
@@ -603,12 +642,26 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 		}
 	}
 
+	if jsonOutput {
+		return batch.write()
+	}
 	return nil
 }
 
-func processFiles(ctx context.Context, files []string) error {
-	isAgent := deps.IsAgentMode()
-	cacheInst, _ := cache.New(!noCache)
+func changedTagFlags(cmd *cobra.Command) map[string]bool {
+	changed := make(map[string]bool)
+	for _, name := range []string{"artist", "title", "album", "date", "genre", "comment", "artwork", "source-url"} {
+		if cmd.Flags().Changed(name) {
+			changed[name] = true
+		}
+	}
+	return changed
+}
+
+func processFiles(ctx context.Context, files []string, changed map[string]bool) error {
+	batch := tagBatch{Status: "success", Results: []tagResult{}}
+	isAgent := deps.IsAgentMode() || jsonOutput
+	cacheInst, _ := cache.New(!noCache && !refreshFlag)
 	client := metadata.NewClient(cacheInst)
 
 	resolvedTarget := progress.ResolveTargetURI(progressTarget, progressSocket, os.Getenv("TAG_TRACK_PROGRESS_TARGET"))
@@ -623,6 +676,10 @@ func processFiles(ctx context.Context, files []string) error {
 
 	for i, file := range files {
 		if stat, err := os.Stat(file); err != nil || stat.IsDir() {
+			if jsonOutput {
+				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: "file not found or is directory"})
+				continue
+			}
 			if isAgent {
 				fmt.Printf("file: %s\nstatus: error\nerror: file not found or is directory\n", file)
 			} else {
@@ -672,26 +729,31 @@ func processFiles(ctx context.Context, files []string) error {
 		}
 
 		// Apply manual overrides if specified via flags
-		if artistFlag != "" {
+		if changed["artist"] {
 			metaRes.Artist = artistFlag
 		}
-		if titleFlag != "" {
+		if changed["title"] {
 			metaRes.Title = titleFlag
 		}
-		if albumFlag != "" {
+		if changed["album"] {
 			metaRes.Album = albumFlag
 		}
-		if dateFlag != "" {
+		if changed["date"] {
 			metaRes.ReleaseDate = dateFlag
+			metaRes.ReleaseYear = ""
 			if len(dateFlag) >= 4 {
 				metaRes.ReleaseYear = dateFlag[:4]
 			}
 		}
-		if genreFlag != "" {
+		if changed["genre"] {
 			metaRes.Genre = genreFlag
+		}
+		if changed["comment"] {
+			metaRes.Comment = &commentFlag
 		}
 		if artworkFlag != "" {
 			metaRes.CoverArtURL = artworkFlag
+			metaRes.RequireArtwork = true
 		}
 		if sourceURLFlag != "" {
 			metaRes.AudioSourceURL = sourceURLFlag
@@ -717,6 +779,10 @@ func processFiles(ctx context.Context, files []string) error {
 		}
 
 		if dryRunFlag {
+			if jsonOutput {
+				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "success", Metadata: metaRes, DryRun: true})
+				continue
+			}
 			if isAgent {
 				fmt.Printf("file: %s\ntitle: %s\nartist: %s\nalbum: %s\nyear: %s\nsource: %s\ncover_art: %s\ndry_run: true\n",
 					file, metaRes.Title, metaRes.Artist, metaRes.Album, metaRes.ReleaseYear, metaRes.Source, metaRes.CoverArtURL)
@@ -747,6 +813,10 @@ func processFiles(ctx context.Context, files []string) error {
 
 		taggedPath, err := metadata.ApplyMetadataToLocalTrack(ctx, file, *metaRes, targetOutDir, verbose, cacheInst)
 		if err != nil {
+			if jsonOutput {
+				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: err.Error()})
+				continue
+			}
 			if rep != nil {
 				_ = rep.Emit(progress.Event{
 					Type:  progress.EventError,
@@ -783,6 +853,10 @@ func processFiles(ctx context.Context, files []string) error {
 			})
 		}
 
+		if jsonOutput {
+			batch.Results = append(batch.Results, tagResult{InputFile: file, OutputFile: taggedPath, Status: "success", Metadata: metaRes})
+			continue
+		}
 		if isAgent {
 			fmt.Printf("file: %s\n", file)
 			fmt.Printf("title: %s\n", metaRes.Title)
@@ -804,6 +878,9 @@ func processFiles(ctx context.Context, files []string) error {
 		}
 	}
 
+	if jsonOutput {
+		return batch.write()
+	}
 	return nil
 }
 
@@ -828,4 +905,32 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+type tagResult struct {
+	InputFile  string                        `json:"input_file"`
+	OutputFile string                        `json:"output_file,omitempty"`
+	Status     string                        `json:"status"`
+	Error      string                        `json:"error,omitempty"`
+	Inspection *metadata.TrackInspection     `json:"inspection,omitempty"`
+	Metadata   *metadata.TrackMetadataResult `json:"metadata,omitempty"`
+	DryRun     bool                          `json:"dry_run,omitempty"`
+}
+type tagBatch struct {
+	Status  string      `json:"status"`
+	Results []tagResult `json:"results"`
+}
+
+func (b tagBatch) write() error {
+	var failures []error
+	for _, r := range b.Results {
+		if r.Error != "" {
+			b.Status = "error"
+			failures = append(failures, fmt.Errorf("%s: %s", r.InputFile, r.Error))
+		}
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(b); err != nil {
+		return err
+	}
+	return errors.Join(failures...)
 }
