@@ -54,8 +54,9 @@ func TestCommandsRejectFailedInputAndMissingDependencies(t *testing.T) {
 	for _, command := range [][]string{nil, {"track", "update"}, {"track", "inspect"}, {"artwork", "embed", "--artwork=cover.png"}} {
 		args := append(append([]string{}, command...), "--json", "input.m4a")
 		out, err := executeCommand(newRootCommand(), args...)
-		if err == nil || out != "" {
-			t.Fatalf("%v should fail preflight without stdout: %q %v", command, out, err)
+		var batch tagBatch
+		if jsonErr := json.Unmarshal([]byte(out), &batch); err == nil || jsonErr != nil || batch.Status != "error" || len(batch.Results) != 1 || batch.Results[0].InputFile != "input.m4a" || batch.Results[0].Error == "" {
+			t.Fatalf("%v lost structured preflight failure: %q %v", command, out, err)
 		}
 	}
 }

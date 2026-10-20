@@ -65,7 +65,7 @@ When audio files are provided, tag-track identifies track metadata through a mul
 Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy) and origin release date preservation.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, err := resolveInputFiles(args)
+			files, err := resolveCommandFiles(args)
 			if err != nil {
 				return err
 			}
@@ -74,7 +74,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			}
 
 			if err := ensureDependencies(cmd.Context()); err != nil {
-				return err
+				return fileCommandFailure(files, err)
 			}
 
 			return processFiles(cmd.Context(), files, changedTagFlags(cmd))
@@ -118,7 +118,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Identify and update metadata and artwork on audio files",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, err := resolveInputFiles(args)
+			files, err := resolveCommandFiles(args)
 			if err != nil {
 				return err
 			}
@@ -126,7 +126,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 				return cmd.Help()
 			}
 			if err := ensureDependencies(cmd.Context()); err != nil {
-				return err
+				return fileCommandFailure(files, err)
 			}
 			return processFiles(cmd.Context(), files, changedTagFlags(cmd))
 		},
@@ -138,7 +138,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Display existing metadata tags, audio codecs, and artwork properties",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, err := resolveInputFiles(args)
+			files, err := resolveCommandFiles(args)
 			if err != nil {
 				return err
 			}
@@ -146,7 +146,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 				return cmd.Help()
 			}
 			if err := ensureDependencies(cmd.Context()); err != nil {
-				return err
+				return fileCommandFailure(files, err)
 			}
 			return inspectFiles(cmd.Context(), files)
 		},
@@ -185,7 +185,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 		Short:        "Embed 1400x1400 normalized square cover art into audio files",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files, err := resolveInputFiles(args)
+			files, err := resolveCommandFiles(args)
 			if err != nil {
 				return err
 			}
@@ -193,10 +193,10 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 				return cmd.Help()
 			}
 			if artworkFlag == "" {
-				return errors.New("must specify artwork with --artwork <url|path> or --url <url>")
+				return fileCommandFailure(files, errors.New("must specify artwork with --artwork <url|path> or --url <url>"))
 			}
 			if err := ensureDependencies(cmd.Context()); err != nil {
-				return err
+				return fileCommandFailure(files, err)
 			}
 			return embedArtworkOnFiles(cmd.Context(), files, artworkFlag)
 		},
@@ -668,10 +668,11 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 	var rep *progress.Reporter
 	if resolvedTarget != "" {
 		r, err := progress.NewReporter(ctx, resolvedTarget)
-		if err == nil {
-			rep = r
-			defer rep.Close()
+		if err != nil {
+			return fileCommandFailure(files, fmt.Errorf("initializing progress reporter: %w", err))
 		}
+		rep = r
+		defer rep.Close()
 	}
 
 	for i, file := range files {

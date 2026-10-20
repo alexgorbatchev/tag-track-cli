@@ -25,6 +25,7 @@ tag-track is a specialized CLI tool for discovering, identifying, refreshing, an
 - Center-crops and resizes retrieved artwork via `ffmpeg` video filters (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`) to guarantee exact 1:1 square aspect ratio.
 - Streams audio payloads via `-c:a copy` into target containers (ID3v2.3 for MP3, MP4 metadata atoms for M4A/AAC, and Vorbis comments for FLAC).
 - Emits atomic structured NDJSON progress telemetry over UNIX domain sockets, TCP endpoints, or custom file descriptors when requested.
+- With `--json`, returns one ordered batch of per-file results, including preflight errors for missing inputs, unreadable input streams, missing dependencies, invalid artwork options, and progress initialization failures. Failed commands exit nonzero.
 
 # Prerequisites
 
