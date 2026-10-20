@@ -54,3 +54,7 @@ install:
 # Clean up build binaries and temporary files
 clean:
     rm -rf bin tag-track coverage.out .tmp
+
+# Download project dependencies for local development
+setup:
+    go mod download
