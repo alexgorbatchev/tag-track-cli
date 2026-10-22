@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/alexgorbatchev/cobra-help-tree v1.1.0
 	github.com/alexgorbatchev/gochromaprint v1.6.1-0.20261018234412-8ac11c575443
-	github.com/alexgorbatchev/godeps v1.0.0
+	github.com/alexgorbatchev/godeps v1.1.0
 	github.com/alexgorbatchev/goshazam v0.8.1
 	github.com/briandowns/spinner v1.23.2
 	github.com/spf13/cobra v1.10.2

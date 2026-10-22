@@ -2,7 +2,8 @@ package deps
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -112,7 +113,7 @@ func TestVerifyDependenciesWithRunner(t *testing.T) {
 		case "ffprobe":
 			return []byte("ffprobe version 6.1.1 Copyright"), nil
 		default:
-			return nil, errors.New("command not found")
+			return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 		}
 	}
 
@@ -147,13 +148,56 @@ func TestCheckDependenciesWithRunner(t *testing.T) {
 	t.Run("missing dependency", func(t *testing.T) {
 		t.Setenv("AGENT", "0")
 		mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return nil, errors.New("executable not found in $PATH")
+			return nil, &exec.Error{Name: name, Err: exec.ErrNotFound}
 		}
 		err := CheckDependenciesWithRunner(context.Background(), mockRunner, nil)
 		if err == nil {
 			t.Fatal("expected error for missing dependencies, got nil")
 		}
 	})
+}
+
+func TestVerifyReportsMissingToolsWhoseErrorsAreSanitized(t *testing.T) {
+	missing := &exec.Error{Name: "ffmpeg", Err: exec.ErrNotFound}
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{"plain", missing},
+		{"with a traceback", fmt.Errorf("%w\nTraceback (most recent call last):\n  File \"wrapper.py\", line 1, in <module>\nFileNotFoundError: ffmpeg", missing)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("AGENT", "0")
+			runner := func(context.Context, string, ...string) ([]byte, error) { return nil, tt.err }
+			reports, err := VerifyDependenciesWithRunner(context.Background(), runner, nil)
+			if err == nil {
+				t.Fatal("accepted a missing tool")
+			}
+			if strings.Contains(err.Error(), "Traceback") {
+				t.Errorf("reported an unsanitized error: %v", err)
+			}
+			for _, r := range reports {
+				if r.Installed || !strings.Contains(r.Error, "missing in $PATH") {
+					t.Errorf("%s reported %+v, want missing", r.Name, r)
+				}
+			}
+		})
+	}
+}
+
+func TestVerifyReportsSanitizedVersionCheckFailures(t *testing.T) {
+	failure := fmt.Errorf("exit status 1\nTraceback (most recent call last):\n  File \"wrapper.py\", line 1, in <module>\nRuntimeError: broken install")
+	runner := func(context.Context, string, ...string) ([]byte, error) { return nil, failure }
+	reports, err := VerifyDependenciesWithRunner(context.Background(), runner, nil)
+	if err == nil {
+		t.Fatal("accepted a failed version check")
+	}
+	for _, r := range reports {
+		if strings.Contains(r.Error, "Traceback") || !strings.Contains(r.Error, "broken install") {
+			t.Errorf("%s reported %q, want the sanitized failure", r.Name, r.Error)
+		}
+	}
 }
 
 func TestCleanErrorMessage(t *testing.T) {
