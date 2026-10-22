@@ -40,6 +40,21 @@ func TestParseVersionOutput(t *testing.T) {
 			output:      "",
 			wantVersion: "",
 		},
+		{
+			name:        "dotted version in another banner",
+			output:      "custom-tool 2.4.1 (build abc)\nsecond line",
+			wantVersion: "2.4.1",
+		},
+		{
+			name:        "date version",
+			output:      "2024.08.01",
+			wantVersion: "2024.08.01",
+		},
+		{
+			name:        "no version",
+			output:      "usage: tool [options]",
+			wantVersion: "",
+		},
 	}
 
 	for _, tt := range tests {
