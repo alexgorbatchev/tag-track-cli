@@ -16,6 +16,8 @@ import (
 func TestAdminJSONDependencies(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	// Installers write into the managed directory under XDG_DATA_HOME.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("AGENT", "0")
 	original := deps.RequiredDependencies

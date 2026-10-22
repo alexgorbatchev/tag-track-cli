@@ -188,6 +188,7 @@ func TestUpgradeSelfFunctions(t *testing.T) {
 
 func TestManagerOperations(t *testing.T) {
 	t.Setenv("AGENT", "0")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		return []byte(name + " version 6.1.1"), nil
 	}
