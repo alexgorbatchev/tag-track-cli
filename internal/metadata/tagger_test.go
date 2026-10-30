@@ -267,11 +267,11 @@ func TestApplyMetadataToLocalTrack_WithCoverArt(t *testing.T) {
 
 	var probe struct {
 		Streams []struct {
-			CodecType   string            `json:"codec_type"`
-			CodecName   string            `json:"codec_name"`
-			Width       int               `json:"width"`
-			Height      int               `json:"height"`
-			Disposition map[string]int    `json:"disposition"`
+			CodecType   string         `json:"codec_type"`
+			CodecName   string         `json:"codec_name"`
+			Width       int            `json:"width"`
+			Height      int            `json:"height"`
+			Disposition map[string]int `json:"disposition"`
 		} `json:"streams"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &probe); err != nil {

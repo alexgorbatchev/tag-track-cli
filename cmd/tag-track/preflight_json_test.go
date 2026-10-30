@@ -15,7 +15,7 @@ func TestJSONPreflightFailures(t *testing.T) {
 	defer cleanup()
 	old := stdinReader
 	t.Cleanup(func() { stdinReader = old })
-	commands := [][]string{nil, {"update"}, {"track", "update"}, {"inspect"}, {"track", "inspect"}, {"artwork", "embed"}}
+	commands := [][]string{nil, {"track", "update"}, {"track", "inspect"}, {"artwork", "embed"}}
 	for _, command := range commands {
 		for _, input := range []string{"empty", "broken", "dependencies"} {
 			t.Run(strings.Join(command, "_")+"/"+input, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestJSONPreflightFailures(t *testing.T) {
 		}
 	}
 	assertJSONPreflightFailure(t, "artwork", "embed", "--json", "input.m4a")
-	out, err := executeCommand(newRootCommand(), "update", "--json", "--progress-target=unsupported://fixture", "input.m4a")
+	out, err := executeCommand(newRootCommand(), "track", "update", "--json", "--progress-target=unsupported://fixture", "input.m4a")
 	var batch tagBatch
 	if jsonErr := json.Unmarshal([]byte(out), &batch); err == nil || jsonErr != nil || len(batch.Results) != 1 || !strings.Contains(batch.Results[0].Error, "initializing progress reporter") {
 		t.Fatalf("reporter failure ignored: %s %v", out, err)

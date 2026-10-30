@@ -1,7 +1,7 @@
 package spinner
 
 import (
-	"fmt"
+	"github.com/alexgorbatchev/tag-track-cli/internal/display"
 	"time"
 
 	bspinner "github.com/briandowns/spinner"
@@ -43,9 +43,9 @@ func (s *Spinner) Update(msg string) {
 // and lets the spinner redraw on the bottom line.
 func (s *Spinner) PrintAbove(msg string) {
 	if s != nil && s.sp != nil && s.active {
-		fmt.Printf("\r\033[K%s\n", msg)
+		display.Printf("\r\033[K%s\n", msg)
 	} else {
-		fmt.Println(msg)
+		display.Println(msg)
 	}
 }
 

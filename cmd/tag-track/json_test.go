@@ -94,7 +94,7 @@ func TestJSONArtworkLocalFile(t *testing.T) {
 			}
 			for _, agent := range []string{"0", "1"} {
 				t.Setenv("AGENT", agent)
-				output, err := executeCommand(newRootCommand(), "inspect", result.Results[0].OutputFile)
+				output, err := executeCommand(newRootCommand(), "track", "inspect", result.Results[0].OutputFile)
 				if err != nil || !strings.Contains(output, "1400x1400") {
 					t.Fatalf("normalized artwork missing in inspection: %s %v", output, err)
 				}

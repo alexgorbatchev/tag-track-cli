@@ -15,6 +15,7 @@ import (
 
 	"github.com/alexgorbatchev/godeps"
 	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/display"
 )
 
 // NormalizeCoverArtToSquare center-crops and scales any input image to a 1:1 square (1400x1400) JPEG.
@@ -102,7 +103,7 @@ func DownloadArtwork(ctx context.Context, artworkURL, tmpDir string, cacheInst *
 	}
 
 	if cacheInst != nil {
-		if savedPath, errPut := cacheInst.PutFile("artworks", artworkURL, imgBytes); errPut == nil {
+		if savedPath, errPut := cacheInst.PutFile("artworks", artworkURL, imgBytes); errPut == nil && savedPath != "" {
 			return savedPath, nil
 		}
 	}
@@ -138,9 +139,9 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	}
 
 	if isVerbose {
-		fmt.Fprintf(os.Stderr, "tagging: %s\n", filePath)
+		display.Fprintf(os.Stderr, "tagging: %s\n", filePath)
 		if metadata.CoverArtURL != "" {
-			fmt.Fprintf(os.Stderr, "coverart: downloading %s\n", metadata.CoverArtURL)
+			display.Fprintf(os.Stderr, "coverart: downloading %s\n", metadata.CoverArtURL)
 		}
 	}
 
@@ -237,6 +238,14 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	commentTag := fmt.Sprintf("Source: %s | Metadata: %s | Tagged: %s", sourceURL, metaProvider, provenanceDate)
 	if metadata.Comment != nil {
 		commentTag = *metadata.Comment
+	} else {
+		userComment, err := resolveUserComment(ctx, filePath, nil)
+		if err != nil {
+			return filePath, err
+		}
+		if userComment != "" {
+			commentTag = userComment + " | " + commentTag
+		}
 	}
 
 	args := []string{
@@ -282,9 +291,9 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 
 	if isVerbose {
 		if coverTempPath != "" {
-			fmt.Fprintf(os.Stderr, "ffmpeg: embedding tags + square 1400x1400 artwork\n")
+			display.Fprintf(os.Stderr, "ffmpeg: embedding tags + square 1400x1400 artwork\n")
 		} else {
-			fmt.Fprintf(os.Stderr, "ffmpeg: embedding tags\n")
+			display.Fprintf(os.Stderr, "ffmpeg: embedding tags\n")
 		}
 	}
 

@@ -207,7 +207,7 @@ func TestNewReporter_StdoutStderr(t *testing.T) {
 
 func TestParseTarget_AllSchemes(t *testing.T) {
 	tests := []struct {
-		target string
+		target     string
 		wantScheme string
 	}{
 		{"stdout://", "stdout"},

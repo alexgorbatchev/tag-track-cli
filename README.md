@@ -1,4 +1,4 @@
-tag-track is a specialized CLI tool for discovering, identifying, refreshing, and embedding normalized metadata and high-resolution 1400x1400 square cover art into DJ audio collections with zero lossy transcoding.
+`tag-track` identifies and updates metadata and 1400x1400 square cover art in DJ audio collections while preserving the audio bitstream.
 
 # What It Does
 
@@ -13,33 +13,34 @@ tag-track is a specialized CLI tool for discovering, identifying, refreshing, an
 
 - Provide audio files as arguments or stream paths directly through standard input.
 - `tag-track` inspects existing audio codecs, metadata tags, and artwork attachments.
-- If metadata is missing or a refresh is requested, `tag-track` finger-prints the audio and looks up canonical title, artist, album, and release information.
+- `tag-track` resolves title, artist, album, and release information for each file, reusing cached results when available.
 - High-resolution artwork is downloaded and formatted into a 1:1 square image.
 - Tags and artwork are embedded directly into the native audio container without transcoding.
 - The file is renamed to a clean `<Artist> - <Title>.<ext>` format.
 
 # How it Really Works
 
-- Generates 16-bit 11025 Hz mono PCM samples via `ffmpeg` to compute Chromaprint fingerprints (`gochromaprint`) and Shazam signatures (`goshazam`).
+- Sends acoustic fingerprints to Shazam and AcoustID to identify tracks from their audio.
 - Queries AcoustID, iTunes Search API, and MusicBrainz API in a fallback cascade to resolve official artist names, track titles, album releases, and year.
 - Center-crops and resizes retrieved artwork via `ffmpeg` video filters (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`) to guarantee exact 1:1 square aspect ratio.
 - Streams audio payloads via `-c:a copy` into target containers (ID3v2.3 for MP3, MP4 metadata atoms for M4A/AAC, and Vorbis comments for FLAC).
 - Emits atomic structured NDJSON progress telemetry over UNIX domain sockets, TCP endpoints, or custom file descriptors when requested. Every event includes `job_id`, an increasing `sequence` starting at 1, a UTC `timestamp`, and numeric batch completion `percent` (0–100). `--job-id` accepts the caller's identifier; otherwise an identifier is generated for the run. File starts report the fraction of preceding files and file completion reports the fraction through the current file, including dry-run previews.
 - With `--json`, returns one ordered batch of per-file results, including preflight errors for missing inputs, unreadable input streams, missing dependencies, invalid artwork options, and progress initialization failures. Failed commands exit nonzero.
 
-# Prerequisites
-
-- [ffmpeg & ffprobe](https://ffmpeg.org/download.html) (version 4.4 or newer)
-
 # Installation
 
 Download the precompiled binary for your platform from [GitHub Releases](https://github.com/alexgorbatchev/tag-track-cli/releases/latest):
 
 ```bash
-curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/latest/download/tag-track_darwin_arm64.tar.gz | tar -xz
+curl -fsSL https://github.com/alexgorbatchev/tag-track-cli/releases/download/v1.0.0/tag-track_1.0.0_darwin_arm64.tar.gz | tar -xz
 chmod +x tag-track
+mkdir -p ~/.local/bin
 mv tag-track ~/.local/bin/
 ```
+
+# Setup
+
+- Install [ffmpeg & ffprobe](https://ffmpeg.org/download.html) version 4.4 or newer for audio inspection and tagging.
 
 # Quick Start
 
@@ -60,7 +61,24 @@ tag-track artwork embed "tracks/Artist - Title.m4a" --url "https://example.com/c
 fetch-track "Boris Brejcha - Space X" --no-metadata -o .tmp/ | tag-track -o tracks/
 ```
 
+Sample Output (inspection of a one-second test file, excerpt):
+
+```text
+codec: aac
+duration: 1s
+bitrate: 10 kbps
+sample_rate: 44100 Hz
+channels: 2
+title: Example Track
+artist: Example Artist
+has_artwork: false
+```
+
 # Options & Flags
+
+Global options are `--verbose` / `-v`, `--job-id`, and `--help` / `-h`. Root `--version` prints the raw version. `tag-track skill` prints installation instructions for the [agent usage skill](skills/tag-track/SKILL.md), which documents every command and its flags. Use `tag-track self upgrade` to update the executable.
+
+`tag-track` and `tag-track track update`:
 
 | Flag | Short | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -71,9 +89,10 @@ fetch-track "Boris Brejcha - Space X" --no-metadata -o .tmp/ | tag-track -o trac
 | `--album <album>` | | `""` | Explicit album tag override |
 | `--date <date>` | | `""` | Explicit release date/year override (YYYY or YYYY-MM-DD) |
 | `--genre <genre>` | | `""` | Explicit genre tag override |
-| `--comment <comment>` | | `""` | Explicit comment tag override |
+| `--comment <comment>` | | `""` | Preserve user text when omitted; replace it when supplied; `--comment ""` clears it. Generated provenance is refreshed only when the comment is omitted. |
+| `--source-url <url>` | | `""` | Audio source recorded in provenance |
 | `--artwork <url\|path>` | | `""` | Cover artwork image URL or local file path to embed |
-| `--refresh` | | `false` | Force re-identification and re-tagging of files |
+| `--refresh` | | `false` | Bypass metadata/artwork cache reads and store fresh results; `--no-cache` takes precedence and disables reads and writes |
 | `--dry-run` | | `false` | Preview proposed metadata without modifying files on disk |
 | `--no-cache` | | `false` | Disable local caching for search queries and artwork |
 | `--progress-target <uri>` | | `""` | Target URI for streaming NDJSON progress telemetry |
@@ -83,6 +102,21 @@ fetch-track "Boris Brejcha - Space X" --no-metadata -o .tmp/ | tag-track -o trac
 | `--help` | `-h` | | Display command help |
 | `--version` | | | Display version |
 
+`tag-track artwork embed`:
+
+| Flag | Short | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--url <url\|path>` | | `""` | Artwork image URL or local path; required |
+| `--artwork <url\|path>` | | `""` | Alternative to `--url` |
+| `--in-place` | `-i` | `false` | Embed into the source directory |
+| `--out-dir <dir>` | `-o` | `""` | Destination; empty uses the source directory |
+
+# Output & Automation
+
+- `AGENT=1` (also `true` or `yes`) emits compact key-value output; human mode uses labeled messages and a spinner. Paths under home display as `~`. Piped `DONE:` and `output:` paths are accepted, including `~/` paths.
+- Help and results go to stdout; command errors go to stderr. Per-file inspection, tagging, and artwork failures continue the batch, then the command exits 1 if any file failed.
+- `--dry-run` preserves audio files but can perform network lookups and cache writes. Metadata/artwork caching uses `XDG_CACHE_HOME` or the platform cache directory.
+
 # License
 
-MIT License (c) 2026 Alex Gorbatchev
+[MIT License](LICENSE) (c) 2026 Alex Gorbatchev

@@ -43,25 +43,25 @@ type FFprobeOutput struct {
 
 // TrackInspection contains parsed tag, audio, and artwork details for a track.
 type TrackInspection struct {
-	Path            string        `json:"path"`
-	Filename        string        `json:"filename"`
-	Format          string        `json:"format"`
-	Codec           string        `json:"codec"`
-	Duration        time.Duration `json:"duration"`
-	DurationSeconds float64       `json:"duration_seconds"`
-	BitRateKbps     int           `json:"bit_rate_kbps"`
-	SampleRateHz    int           `json:"sample_rate_hz"`
-	Channels        int           `json:"channels"`
-	Title           string        `json:"title,omitempty"`
-	Artist          string        `json:"artist,omitempty"`
-	Album           string        `json:"album,omitempty"`
-	Date            string        `json:"date,omitempty"`
-	Genre           string        `json:"genre,omitempty"`
-	Comment         string        `json:"comment,omitempty"`
-	HasArtwork      bool          `json:"has_artwork"`
-	ArtworkWidth    int           `json:"artwork_width,omitempty"`
-	ArtworkHeight   int           `json:"artwork_height,omitempty"`
-	IsSquareArtwork bool          `json:"is_square_artwork"`
+	Path            string            `json:"path"`
+	Filename        string            `json:"filename"`
+	Format          string            `json:"format"`
+	Codec           string            `json:"codec"`
+	Duration        time.Duration     `json:"duration"`
+	DurationSeconds float64           `json:"duration_seconds"`
+	BitRateKbps     int               `json:"bit_rate_kbps"`
+	SampleRateHz    int               `json:"sample_rate_hz"`
+	Channels        int               `json:"channels"`
+	Title           string            `json:"title,omitempty"`
+	Artist          string            `json:"artist,omitempty"`
+	Album           string            `json:"album,omitempty"`
+	Date            string            `json:"date,omitempty"`
+	Genre           string            `json:"genre,omitempty"`
+	Comment         string            `json:"comment,omitempty"`
+	HasArtwork      bool              `json:"has_artwork"`
+	ArtworkWidth    int               `json:"artwork_width,omitempty"`
+	ArtworkHeight   int               `json:"artwork_height,omitempty"`
+	IsSquareArtwork bool              `json:"is_square_artwork"`
 	RawTags         map[string]string `json:"raw_tags,omitempty"`
 }
 

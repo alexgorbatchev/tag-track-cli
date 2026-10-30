@@ -6,6 +6,11 @@ status: current
 
 # tag-track-cli
 
+- **Batch failures:** Continue processing remaining files after inspection, tagging, or artwork errors, then return an error so the command exits 1.
+
+- **CLI operational skill:** Maintain `skills/tag-track/SKILL.md` in the same change as any command, argument, flag, default, environment variable, output, or side-effect change. Update its `last_modified` metadata and verify against the live command tree.
+- **CLI presentation:** Use cobra-help-tree/v2 for stdout help and agent skill alerts. Route terminal messages through internal/display so home paths fold to ~; preserve actual paths in filesystem operations, subprocess arguments, and telemetry. Keep commands subject-first, including `tag-track self upgrade`.
+
 Go CLI tool for inspecting, identifying, updating, and embedding normalized metadata and 1400x1400 square cover art into single audio tracks for DJ collections.
 
 ## Commands
@@ -30,10 +35,12 @@ Go CLI tool for inspecting, identifying, updating, and embedding normalized meta
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local mock transports, audio operations use synthetic test audio files, and zero unit tests depend on the live internet.
 - **Output Formatting:** Plain text without emojis. Dual-mode output support via `AGENT=1`.
 - **Progress Envelope:** Every event includes `job_id`, increasing `sequence` (starting at 1 per reporter), UTC `timestamp`, and numeric overall `percent` from 0 to 100. Accept caller-supplied `--job-id` or generate one. For multiple files, calculate completion across the batch. When delegated by fetch-track, its parent reporter owns the outward job ID, sequence, and overall acquisition percentage.
-- **Help Screens:** CLI help output (`--help`) must display an aligned hierarchical tree view with `├─` and `╰─` glyphs powered by `github.com/alexgorbatchev/cobra-help-tree`.
+- **Help Screens:** CLI help output (`--help`) must display an aligned hierarchical tree view with `├─` and `╰─` glyphs powered by `github.com/alexgorbatchev/cobra-help-tree/v2`.
 - **Square Artwork Normalization:** Always ensure embedded album art is strictly 1:1 square (1400x1400) by applying center-crop and resize filters (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`).
 - **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD`) and embed provenance comments (`Source: ... | Metadata: ... | Tagged: ...`).
-- **Self-Upgrade:** `tag-track upgrade` checks for newer GitHub releases and upgrades in-place via `godeps.UpgradeSelf`.
+- **User Comments:** Preserve existing user text when `--comment` is omitted, replace it when supplied, and clear it for an explicitly empty value. When the comment is omitted, replace the generated provenance suffix rather than accumulating it.
+- **Refresh:** `--refresh` bypasses metadata/artwork cache reads and stores fresh results. `--no-cache` disables both reads and writes, including when combined with refresh. Dependency probes retain their independent cache policy. `--force` is not an alias.
+- **Self-Upgrade:** `tag-track self upgrade` checks for newer GitHub releases and upgrades in-place via `godeps.UpgradeSelf`.
 
 ## Boundaries
 - **Always:** Run `just test` and `just vet` before committing changes.

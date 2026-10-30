@@ -13,8 +13,17 @@ import (
 
 // Cache manages local XDG caching for search queries, metadata, cover art, and dependency probes.
 type Cache struct {
-	baseDir string
-	enabled bool
+	baseDir     string
+	enabled     bool
+	bypassReads bool
+}
+
+// Refresh bypasses reads while allowing successful lookups to replace cached entries.
+// A disabled cache remains disabled for both reads and writes.
+func (c *Cache) Refresh() {
+	if c != nil {
+		c.bypassReads = true
+	}
 }
 
 // Entry wraps cached items with timestamp and TTL metadata.
@@ -76,7 +85,7 @@ func (c *Cache) Enabled() bool {
 
 // Get retrieves a cached item if present and within its TTL.
 func (c *Cache) Get(namespace, key string, target interface{}) bool {
-	if !c.Enabled() {
+	if !c.Enabled() || c.bypassReads {
 		return false
 	}
 
@@ -136,7 +145,7 @@ func (c *Cache) Put(namespace, key string, item interface{}, ttl time.Duration) 
 
 // GetFile retrieves a cached file path (e.g. cover art) if present and within TTL.
 func (c *Cache) GetFile(namespace, key string, maxAge time.Duration) (string, bool) {
-	if !c.Enabled() {
+	if !c.Enabled() || c.bypassReads {
 		return "", false
 	}
 

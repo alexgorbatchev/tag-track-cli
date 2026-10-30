@@ -6,6 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
+	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
+	"github.com/alexgorbatchev/tag-track-cli/internal/display"
+	"github.com/alexgorbatchev/tag-track-cli/internal/metadata"
+	"github.com/alexgorbatchev/tag-track-cli/internal/progress"
+	"github.com/alexgorbatchev/tag-track-cli/internal/spinner"
+	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"os/signal"
@@ -13,14 +20,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree"
-	"github.com/alexgorbatchev/tag-track-cli/internal/cache"
-	"github.com/alexgorbatchev/tag-track-cli/internal/deps"
-	"github.com/alexgorbatchev/tag-track-cli/internal/metadata"
-	"github.com/alexgorbatchev/tag-track-cli/internal/progress"
-	"github.com/alexgorbatchev/tag-track-cli/internal/spinner"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -51,10 +50,11 @@ var (
 
 func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:          "tag-track [file...]",
-		Short:        "Inspect, enrich, and embed normalized metadata and artwork on audio files",
-		Version:      version,
-		SilenceUsage: true,
+		Use:           "tag-track [file...]",
+		Short:         "Inspect, enrich, and embed normalized metadata and artwork on audio files",
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		Long: `tag-track is a CLI tool for identifying, tagging, retagging, and embedding normalized artwork into DJ audio files with zero lossy transcoding.
 
 When audio files are provided, tag-track identifies track metadata through a multi-tier fallback chain:
@@ -92,14 +92,12 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 	rootCmd.Flags().StringVar(&albumFlag, "album", "", "Explicit album tag override")
 	rootCmd.Flags().StringVar(&dateFlag, "date", "", "Explicit release date/year tag override (YYYY or YYYY-MM-DD)")
 	rootCmd.Flags().StringVar(&genreFlag, "genre", "", "Explicit genre tag override")
-	rootCmd.Flags().StringVar(&commentFlag, "comment", "", "Explicit comment tag override")
+	rootCmd.Flags().StringVar(&commentFlag, "comment", "", "Set user comment text; empty clears it, omitted preserves it")
 	rootCmd.Flags().StringVar(&sourceURLFlag, "source-url", "", "Source URL of the audio stream to record in provenance tags")
 	rootCmd.Flags().StringVar(&artworkFlag, "artwork", "", "Cover artwork image URL or local file path to embed")
 	rootCmd.Flags().StringVar(&artworkFlag, "cover", "", "Alias for --artwork")
 	_ = rootCmd.Flags().MarkHidden("cover")
-	rootCmd.Flags().BoolVar(&refreshFlag, "refresh", false, "Force re-identification and re-tagging of files")
-	rootCmd.Flags().BoolVar(&refreshFlag, "force", false, "Alias for --refresh")
-	_ = rootCmd.Flags().MarkHidden("force")
+	rootCmd.Flags().BoolVar(&refreshFlag, "refresh", false, "Fetch fresh metadata and artwork and update cached results")
 	rootCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Preview proposed metadata without modifying files on disk")
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
@@ -156,25 +154,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 
 	trackCmd.AddCommand(trackUpdateCmd, trackInspectCmd)
 
-	// Top-level aliases for subject commands
 	rootCmd.AddCommand(trackCmd)
-
-	topUpdateCmd := &cobra.Command{
-		Use:          "update [file...]",
-		Short:        "Identify and update metadata and artwork on audio files (alias for 'track update')",
-		SilenceUsage: true,
-		RunE:         trackUpdateCmd.RunE,
-	}
-	copyFlags(rootCmd, topUpdateCmd)
-	rootCmd.AddCommand(topUpdateCmd)
-
-	topInspectCmd := &cobra.Command{
-		Use:          "inspect <file...>",
-		Short:        "Display existing metadata tags, audio codecs, and artwork properties (alias for 'track inspect')",
-		SilenceUsage: true,
-		RunE:         trackInspectCmd.RunE,
-	}
-	rootCmd.AddCommand(topInspectCmd)
 
 	// Subject: artwork
 	artworkCmd := &cobra.Command{
@@ -226,35 +206,35 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			if isAgent {
 				for _, r := range reports {
 					if r.Satisfied {
-						fmt.Printf("%s: ok (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
+						display.Printf("%s: ok (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
 					} else if !r.Installed {
-						fmt.Printf("%s: missing\n", r.Name)
+						display.Printf("%s: missing\n", r.Name)
 					} else {
-						fmt.Printf("%s: fail (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
+						display.Printf("%s: fail (version %s, min %s)\n", r.Name, r.DetectedVersion, r.MinVersion)
 					}
 				}
 				if err != nil {
-					fmt.Printf("status: error\nerror: %v\n", err)
+					display.Printf("status: error\nerror: %v\n", err)
 					return err
 				}
-				fmt.Println("status: ok")
+				display.Println("status: ok")
 				return nil
 			}
 
 			for _, r := range reports {
 				if r.Satisfied {
-					fmt.Printf("%s: %s (min %s) [OK]\n", r.Name, r.DetectedVersion, r.MinVersion)
+					display.Printf("%s: %s (min %s) [OK]\n", r.Name, r.DetectedVersion, r.MinVersion)
 				} else if !r.Installed {
-					fmt.Printf("%s: missing in $PATH [FAIL] - %s\n", r.Name, r.Error)
+					display.Printf("%s: missing in $PATH [FAIL] - %s\n", r.Name, r.Error)
 				} else {
-					fmt.Printf("%s: %s (min %s) [FAIL] - %s\n", r.Name, r.DetectedVersion, r.MinVersion, r.Error)
+					display.Printf("%s: %s (min %s) [FAIL] - %s\n", r.Name, r.DetectedVersion, r.MinVersion, r.Error)
 				}
 			}
 
 			if err != nil {
 				return err
 			}
-			fmt.Println("\nAll dependencies met.")
+			display.Println("\nAll dependencies met.")
 			return nil
 		},
 	}
@@ -271,24 +251,24 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
-					fmt.Printf("Installing %s...\n", depName)
+					display.Printf("Installing %s...\n", depName)
 					if err := deps.InstallDependency(cmd.Context(), depName); err != nil {
 						return fmt.Errorf("installing %s: %w", depName, err)
 					}
-					fmt.Printf("%s installed successfully.\n", depName)
+					display.Printf("%s installed successfully.\n", depName)
 				}
 				return nil
 			}
 
-			fmt.Println("Checking and installing missing dependencies...")
+			display.Println("Checking and installing missing dependencies...")
 			installed, err := deps.InstallMissingDependencies(cmd.Context())
 			if err != nil {
 				return err
 			}
 			if len(installed) == 0 {
-				fmt.Println("All dependencies are already satisfied.")
+				display.Println("All dependencies are already satisfied.")
 			} else {
-				fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
+				display.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 			}
 			return nil
 		},
@@ -306,21 +286,21 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			_ = deps.InitManagedPath()
 			if len(args) > 0 {
 				for _, depName := range args {
-					fmt.Printf("Updating %s...\n", depName)
+					display.Printf("Updating %s...\n", depName)
 					if err := deps.UpdateDependency(cmd.Context(), depName); err != nil {
 						return fmt.Errorf("updating %s: %w", depName, err)
 					}
-					fmt.Printf("%s updated successfully.\n", depName)
+					display.Printf("%s updated successfully.\n", depName)
 				}
 				return nil
 			}
 
-			fmt.Println("Updating all dependencies to latest versions...")
+			display.Println("Updating all dependencies to latest versions...")
 			updated, err := deps.UpdateAllDependencies(cmd.Context())
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Successfully updated: %s\n", strings.Join(updated, ", "))
+			display.Printf("Successfully updated: %s\n", strings.Join(updated, ", "))
 			return nil
 		},
 	}
@@ -331,7 +311,6 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 	// Upgrade command
 	upgradeCmd := &cobra.Command{
 		Use:          "upgrade",
-		Aliases:      []string{"self-update", "update-self"},
 		Short:        "Upgrade tag-track CLI binary to the latest released version",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -340,31 +319,33 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 			}
 			isAgent := deps.IsAgentMode()
 			if !isAgent {
-				fmt.Printf("Checking for newer tag-track release (current version: %s)...\n", version)
+				display.Printf("Checking for newer tag-track release (current version: %s)...\n", version)
 			}
 			newVer, err := deps.UpgradeSelf(cmd.Context(), version)
 			if err != nil {
 				if strings.Contains(err.Error(), "already at the latest version") {
 					if isAgent {
-						fmt.Printf("upgrade: current\nversion: %s\n", version)
+						display.Printf("upgrade: current\nversion: %s\n", version)
 					} else {
-						fmt.Printf("tag-track is already up to date (version %s).\n", version)
+						display.Printf("tag-track is already up to date (version %s).\n", version)
 					}
 					return nil
 				}
 				return fmt.Errorf("upgrade failed: %w", err)
 			}
 			if isAgent {
-				fmt.Printf("upgrade: ok\nversion: %s\n", newVer)
+				display.Printf("upgrade: ok\nversion: %s\n", newVer)
 			} else {
-				fmt.Printf("Successfully upgraded tag-track to version %s!\n", newVer)
+				display.Printf("Successfully upgraded tag-track to version %s!\n", newVer)
 			}
 			return nil
 		},
 	}
-	rootCmd.AddCommand(upgradeCmd)
+	selfCmd := &cobra.Command{Use: "self", Short: "Manage this executable"}
+	selfCmd.AddCommand(upgradeCmd)
+	rootCmd.AddCommand(selfCmd)
 
-	cobrahelptree.Setup(rootCmd)
+	setupHelp(rootCmd)
 	return rootCmd
 }
 
@@ -376,14 +357,12 @@ func copyFlags(src, dst *cobra.Command) {
 	dst.Flags().StringVar(&albumFlag, "album", "", "Explicit album tag override")
 	dst.Flags().StringVar(&dateFlag, "date", "", "Explicit release date/year tag override (YYYY or YYYY-MM-DD)")
 	dst.Flags().StringVar(&genreFlag, "genre", "", "Explicit genre tag override")
-	dst.Flags().StringVar(&commentFlag, "comment", "", "Explicit comment tag override")
+	dst.Flags().StringVar(&commentFlag, "comment", "", "Set user comment text; empty clears it, omitted preserves it")
 	dst.Flags().StringVar(&sourceURLFlag, "source-url", "", "Source URL of the audio stream to record in provenance tags")
 	dst.Flags().StringVar(&artworkFlag, "artwork", "", "Cover artwork image URL or local file path to embed")
 	dst.Flags().StringVar(&artworkFlag, "cover", "", "Alias for --artwork")
 	_ = dst.Flags().MarkHidden("cover")
-	dst.Flags().BoolVar(&refreshFlag, "refresh", false, "Force re-identification and re-tagging of files")
-	dst.Flags().BoolVar(&refreshFlag, "force", false, "Alias for --refresh")
-	_ = dst.Flags().MarkHidden("force")
+	dst.Flags().BoolVar(&refreshFlag, "refresh", false, "Fetch fresh metadata and artwork and update cached results")
 	dst.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Preview proposed metadata without modifying files on disk")
 	dst.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	dst.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events")
@@ -414,9 +393,12 @@ func resolveInputFiles(args []string) ([]string, error) {
 				}
 			}
 			if len(prefixedFiles) > 0 {
-				return prefixedFiles, scanner.Err()
+				allLines = prefixedFiles
 			}
-			return allLines, scanner.Err()
+			if err := scanner.Err(); err != nil {
+				return nil, err
+			}
+			return expandInputPaths(allLines)
 		}
 	}
 
@@ -428,6 +410,17 @@ func resolveInputFiles(args []string) ([]string, error) {
 		}
 	}
 
+	return expandInputPaths(files)
+}
+
+func expandInputPaths(files []string) ([]string, error) {
+	for i, path := range files {
+		expanded, err := display.ExpandPath(path)
+		if err != nil {
+			return nil, err
+		}
+		files[i] = expanded
+	}
 	return files, nil
 }
 
@@ -454,31 +447,31 @@ func ensureDependencies(ctx context.Context) error {
 
 	if autoInstall {
 		if !deps.IsAgentMode() && !jsonOutput {
-			fmt.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
+			display.Printf("Auto-installing missing dependencies: %s...\n", strings.Join(missing, ", "))
 		}
 		installed, installErr := deps.InstallMissingDependencies(ctx)
 		if installErr != nil {
 			return fmt.Errorf("auto-installing dependencies: %w", installErr)
 		}
 		if len(installed) > 0 && !deps.IsAgentMode() && !jsonOutput {
-			fmt.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
+			display.Printf("Successfully installed: %s\n", strings.Join(installed, ", "))
 		}
 		return nil
 	}
 
 	if !deps.IsAgentMode() && !jsonOutput {
 		reader := bufio.NewReader(stdinReader)
-		fmt.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
+		display.Printf("\nMissing required dependencies: %s\nWould you like to auto-install them to managed directory? [Y/n]: ", strings.Join(missing, ", "))
 		ans, _ := reader.ReadString('\n')
 		ans = strings.TrimSpace(strings.ToLower(ans))
 		if ans == "" || ans == "y" || ans == "yes" {
-			fmt.Printf("Installing dependencies: %s...\n", strings.Join(missingNames, ", "))
+			display.Printf("Installing dependencies: %s...\n", strings.Join(missingNames, ", "))
 			installed, installErr := deps.InstallMissingDependencies(ctx)
 			if installErr != nil {
 				return fmt.Errorf("auto-installing dependencies: %w", installErr)
 			}
 			if len(installed) > 0 {
-				fmt.Printf("Successfully installed: %s\n\n", strings.Join(installed, ", "))
+				display.Printf("Successfully installed: %s\n\n", strings.Join(installed, ", "))
 			}
 			return nil
 		}
@@ -490,6 +483,7 @@ func ensureDependencies(ctx context.Context) error {
 func inspectFiles(ctx context.Context, files []string) error {
 	batch := tagBatch{Status: "success", Results: []tagResult{}}
 	isAgent := deps.IsAgentMode()
+	var failures []error
 
 	for _, file := range files {
 		info, err := metadata.InspectAudioTrack(ctx, file, nil)
@@ -503,89 +497,91 @@ func inspectFiles(ctx context.Context, files []string) error {
 			continue
 		}
 		if err != nil {
+			failures = append(failures, fmt.Errorf("inspecting %s: %w", display.Path(file), err))
 			if isAgent {
-				fmt.Printf("file: %s\nstatus: error\nerror: %v\n", file, err)
+				display.Printf("file: %s\nstatus: error\nerror: %v\n", display.Path(file), err)
 			} else {
-				fmt.Printf("[ERROR] Inspecting %s: %v\n", file, err)
+				display.Printf("[ERROR] Inspecting %s: %v\n", display.Path(file), err)
 			}
 			continue
 		}
 
 		if isAgent {
-			fmt.Printf("file: %s\n", info.Path)
-			fmt.Printf("format: %s\n", info.Format)
-			fmt.Printf("codec: %s\n", info.Codec)
-			fmt.Printf("duration: %s\n", info.Duration.Round(time.Second))
-			fmt.Printf("bitrate: %d kbps\n", info.BitRateKbps)
-			fmt.Printf("sample_rate: %d Hz\n", info.SampleRateHz)
-			fmt.Printf("channels: %d\n", info.Channels)
+			display.Printf("file: %s\n", display.Path(info.Path))
+			display.Printf("format: %s\n", info.Format)
+			display.Printf("codec: %s\n", info.Codec)
+			display.Printf("duration: %s\n", info.Duration.Round(time.Second))
+			display.Printf("bitrate: %d kbps\n", info.BitRateKbps)
+			display.Printf("sample_rate: %d Hz\n", info.SampleRateHz)
+			display.Printf("channels: %d\n", info.Channels)
 			if info.Title != "" {
-				fmt.Printf("title: %s\n", info.Title)
+				display.Printf("title: %s\n", info.Title)
 			}
 			if info.Artist != "" {
-				fmt.Printf("artist: %s\n", info.Artist)
+				display.Printf("artist: %s\n", info.Artist)
 			}
 			if info.Album != "" {
-				fmt.Printf("album: %s\n", info.Album)
+				display.Printf("album: %s\n", info.Album)
 			}
 			if info.Date != "" {
-				fmt.Printf("date: %s\n", info.Date)
+				display.Printf("date: %s\n", info.Date)
 			}
 			if info.Genre != "" {
-				fmt.Printf("genre: %s\n", info.Genre)
+				display.Printf("genre: %s\n", info.Genre)
 			}
 			if info.Comment != "" {
-				fmt.Printf("comment: %s\n", info.Comment)
+				display.Printf("comment: %s\n", info.Comment)
 			}
-			fmt.Printf("has_artwork: %t\n", info.HasArtwork)
+			display.Printf("has_artwork: %t\n", info.HasArtwork)
 			if info.HasArtwork {
-				fmt.Printf("artwork_dimensions: %dx%d\n", info.ArtworkWidth, info.ArtworkHeight)
-				fmt.Printf("artwork_square: %t\n", info.IsSquareArtwork)
+				display.Printf("artwork_dimensions: %dx%d\n", info.ArtworkWidth, info.ArtworkHeight)
+				display.Printf("artwork_square: %t\n", info.IsSquareArtwork)
 			}
 		} else {
-			fmt.Printf("File: %s\n", info.Path)
-			fmt.Printf("  Codec / Format: %s (%s, %d kbps, %d Hz)\n", info.Codec, info.Format, info.BitRateKbps, info.SampleRateHz)
-			fmt.Printf("  Duration: %s\n", info.Duration.Round(time.Second))
+			display.Printf("File: %s\n", display.Path(info.Path))
+			display.Printf("  Codec / Format: %s (%s, %d kbps, %d Hz)\n", info.Codec, info.Format, info.BitRateKbps, info.SampleRateHz)
+			display.Printf("  Duration: %s\n", info.Duration.Round(time.Second))
 			if info.Title != "" {
-				fmt.Printf("  Title: %s\n", info.Title)
+				display.Printf("  Title: %s\n", info.Title)
 			}
 			if info.Artist != "" {
-				fmt.Printf("  Artist: %s\n", info.Artist)
+				display.Printf("  Artist: %s\n", info.Artist)
 			}
 			if info.Album != "" {
-				fmt.Printf("  Album: %s\n", info.Album)
+				display.Printf("  Album: %s\n", info.Album)
 			}
 			if info.Date != "" {
-				fmt.Printf("  Date / Year: %s\n", info.Date)
+				display.Printf("  Date / Year: %s\n", info.Date)
 			}
 			if info.Genre != "" {
-				fmt.Printf("  Genre: %s\n", info.Genre)
+				display.Printf("  Genre: %s\n", info.Genre)
 			}
 			if info.Comment != "" {
-				fmt.Printf("  Comment: %s\n", info.Comment)
+				display.Printf("  Comment: %s\n", info.Comment)
 			}
 			if info.HasArtwork {
 				squareNote := ""
 				if info.IsSquareArtwork {
 					squareNote = " (1:1 square)"
 				}
-				fmt.Printf("  Cover Art: %dx%d%s\n", info.ArtworkWidth, info.ArtworkHeight, squareNote)
+				display.Printf("  Cover Art: %dx%d%s\n", info.ArtworkWidth, info.ArtworkHeight, squareNote)
 			} else {
-				fmt.Printf("  Cover Art: none\n")
+				display.Printf("  Cover Art: none\n")
 			}
-			fmt.Println()
+			display.Println()
 		}
 	}
 
 	if jsonOutput {
 		return batch.write()
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) error {
 	batch := tagBatch{Status: "success", Results: []tagResult{}}
 	isAgent := deps.IsAgentMode() || jsonOutput
+	var failures []error
 	cacheInst, _ := cache.New(!noCache)
 
 	for _, file := range files {
@@ -612,7 +608,7 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 		}
 
 		if !isAgent {
-			fmt.Printf("Embedding artwork into %s...\n", file)
+			display.Printf("Embedding artwork into %s...\n", display.Path(file))
 		}
 
 		outPath, err := metadata.ApplyMetadataToLocalTrack(ctx, file, meta, targetOutDir, verbose, cacheInst)
@@ -621,10 +617,11 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: err.Error()})
 				continue
 			}
+			failures = append(failures, fmt.Errorf("embedding artwork on %s: %w", display.Path(file), err))
 			if isAgent {
-				fmt.Printf("file: %s\nstatus: error\nerror: %v\n", file, err)
+				display.Printf("file: %s\nstatus: error\nerror: %v\n", display.Path(file), err)
 			} else {
-				fmt.Printf("[ERROR] Embedding artwork on %s: %v\n", file, err)
+				display.Printf("[ERROR] Embedding artwork on %s: %v\n", display.Path(file), err)
 			}
 			continue
 		}
@@ -638,16 +635,16 @@ func embedArtworkOnFiles(ctx context.Context, files []string, artURL string) err
 			continue
 		}
 		if isAgent {
-			fmt.Printf("file: %s\nartwork: %s\nstatus: ok\noutput: %s\n", file, artURL, outPath)
+			display.Printf("file: %s\nartwork: %s\nstatus: ok\noutput: %s\n", display.Path(file), artURL, display.Path(outPath))
 		} else {
-			fmt.Printf("[OK] Artwork embedded: %s\n", outPath)
+			display.Printf("[OK] Artwork embedded: %s\n", display.Path(outPath))
 		}
 	}
 
 	if jsonOutput {
 		return batch.write()
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 func changedTagFlags(cmd *cobra.Command) map[string]bool {
@@ -663,7 +660,11 @@ func changedTagFlags(cmd *cobra.Command) map[string]bool {
 func processFiles(ctx context.Context, files []string, changed map[string]bool) error {
 	batch := tagBatch{Status: "success", Results: []tagResult{}}
 	isAgent := deps.IsAgentMode() || jsonOutput
-	cacheInst, _ := cache.New(!noCache && !refreshFlag)
+	cacheInst, _ := cache.New(!noCache)
+	var failures []error
+	if refreshFlag {
+		cacheInst.Refresh()
+	}
 	client := metadata.NewClient(cacheInst)
 
 	resolvedTarget := progress.ResolveTargetURI(progressTarget, progressSocket, os.Getenv("TAG_TRACK_PROGRESS_TARGET"))
@@ -683,10 +684,15 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: "file not found or is directory"})
 				continue
 			}
+			if err == nil {
+				err = fmt.Errorf("path is a directory")
+			}
+			failures = append(failures, fmt.Errorf("reading %s: %w", display.Path(file), err))
+			_ = rep.Emit(progress.Event{Type: progress.EventError, Phase: "identify", Step: i + 1, TotalSteps: len(files), Error: err.Error()})
 			if isAgent {
-				fmt.Printf("file: %s\nstatus: error\nerror: file not found or is directory\n", file)
+				display.Printf("file: %s\nstatus: error\nerror: file not found or is directory\n", display.Path(file))
 			} else {
-				fmt.Printf("[ERROR] File not found or is directory: %s\n", file)
+				display.Printf("[ERROR] File not found or is directory: %s\n", display.Path(file))
 			}
 			continue
 		}
@@ -787,24 +793,24 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 				continue
 			}
 			if isAgent {
-				fmt.Printf("file: %s\ntitle: %s\nartist: %s\nalbum: %s\nyear: %s\nsource: %s\ncover_art: %s\ndry_run: true\n",
-					file, metaRes.Title, metaRes.Artist, metaRes.Album, metaRes.ReleaseYear, metaRes.Source, metaRes.CoverArtURL)
+				display.Printf("file: %s\ntitle: %s\nartist: %s\nalbum: %s\nyear: %s\nsource: %s\ncover_art: %s\ndry_run: true\n",
+					display.Path(file), metaRes.Title, metaRes.Artist, metaRes.Album, metaRes.ReleaseYear, metaRes.Source, metaRes.CoverArtURL)
 			} else {
-				fmt.Printf("Preview for %s:\n", file)
-				fmt.Printf("  Artist: %s\n", metaRes.Artist)
-				fmt.Printf("  Title: %s\n", metaRes.Title)
+				display.Printf("Preview for %s:\n", display.Path(file))
+				display.Printf("  Artist: %s\n", metaRes.Artist)
+				display.Printf("  Title: %s\n", metaRes.Title)
 				if metaRes.Album != "" {
-					fmt.Printf("  Album: %s\n", metaRes.Album)
+					display.Printf("  Album: %s\n", metaRes.Album)
 				}
 				if metaRes.ReleaseYear != "" {
-					fmt.Printf("  Year: %s\n", metaRes.ReleaseYear)
+					display.Printf("  Year: %s\n", metaRes.ReleaseYear)
 				}
 				if metaRes.CoverArtURL != "" {
-					fmt.Printf("  Artwork: %s\n", metaRes.CoverArtURL)
+					display.Printf("  Artwork: %s\n", metaRes.CoverArtURL)
 				}
-				fmt.Printf("  Source: %s\n", metaRes.Source)
-				fmt.Println("  [DRY RUN - file was not modified]")
-				fmt.Println()
+				display.Printf("  Source: %s\n", metaRes.Source)
+				display.Println("  [DRY RUN - file was not modified]")
+				display.Println()
 			}
 			_ = rep.Emit(progress.Event{
 				Type: progress.EventComplete, Phase: "complete", Step: i + 1, TotalSteps: len(files),
@@ -824,6 +830,7 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 				batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: err.Error()})
 				continue
 			}
+			failures = append(failures, fmt.Errorf("tagging %s: %w", display.Path(file), err))
 			if rep != nil {
 				_ = rep.Emit(progress.Event{
 					Type:  progress.EventError,
@@ -831,9 +838,9 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 				})
 			}
 			if isAgent {
-				fmt.Printf("file: %s\nstatus: error\nerror: %v\n", file, err)
+				display.Printf("file: %s\nstatus: error\nerror: %v\n", display.Path(file), err)
 			} else {
-				fmt.Printf("[ERROR] Tagging %s: %v\n", file, err)
+				display.Printf("[ERROR] Tagging %s: %v\n", display.Path(file), err)
 			}
 			continue
 		}
@@ -865,30 +872,30 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 			continue
 		}
 		if isAgent {
-			fmt.Printf("file: %s\n", file)
-			fmt.Printf("title: %s\n", metaRes.Title)
-			fmt.Printf("artist: %s\n", metaRes.Artist)
+			display.Printf("file: %s\n", display.Path(file))
+			display.Printf("title: %s\n", metaRes.Title)
+			display.Printf("artist: %s\n", metaRes.Artist)
 			if metaRes.Album != "" {
-				fmt.Printf("album: %s\n", metaRes.Album)
+				display.Printf("album: %s\n", metaRes.Album)
 			}
 			if metaRes.ReleaseYear != "" {
-				fmt.Printf("year: %s\n", metaRes.ReleaseYear)
+				display.Printf("year: %s\n", metaRes.ReleaseYear)
 			}
-			fmt.Printf("source: %s\n", metaRes.Source)
-			fmt.Printf("output: %s\n", taggedPath)
+			display.Printf("source: %s\n", metaRes.Source)
+			display.Printf("output: %s\n", display.Path(taggedPath))
 		} else {
 			if metaRes.Title != "" {
-				fmt.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
-				fmt.Printf("  - source: %s\n", metaRes.Source)
+				display.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
+				display.Printf("  - source: %s\n", metaRes.Source)
 			}
-			fmt.Printf("DONE: %s\n", taggedPath)
+			display.Printf("DONE: %s\n", display.Path(taggedPath))
 		}
 	}
 
 	if jsonOutput {
 		return batch.write()
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 func main() {
@@ -910,6 +917,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Operation canceled by user.")
 			os.Exit(130)
 		}
+		display.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -138,6 +138,38 @@ func TestMainFunction(t *testing.T) {
 	}
 }
 
+func TestInspectFoldsHomePaths(t *testing.T) {
+	_, cleanup := setupMainTestEnv(t)
+	defer cleanup()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := createTestAudioFile(t, home, "Artist - Title.m4a")
+	for _, mode := range []string{"0", "1"} {
+		t.Setenv("AGENT", mode)
+		out, err := executeCommand(newRootCommand(), "track", "inspect", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out, home) || !strings.Contains(out, "~/Artist - Title.m4a") {
+			t.Fatalf("unfolded output: %s", out)
+		}
+	}
+}
+
+func TestPipedHomePaths(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	old := stdinReader
+	defer func() { stdinReader = old }()
+	for _, line := range []string{"~/song.flac\n", "DONE: ~/song.flac\n", "output: ~/song.flac\n"} {
+		stdinReader = strings.NewReader(line)
+		files, err := resolveInputFiles([]string{"-"})
+		if err != nil || len(files) != 1 || files[0] != filepath.Join(home, "song.flac") {
+			t.Fatalf("paths=%v err=%v", files, err)
+		}
+	}
+}
+
 func TestRootCommand_Help(t *testing.T) {
 	cmd := newRootCommand()
 	var outBuf bytes.Buffer
@@ -177,7 +209,7 @@ func TestInspectCommand(t *testing.T) {
 	t.Run("agent mode", func(t *testing.T) {
 		t.Setenv("AGENT", "1")
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "inspect", audioPath)
+		out, err := executeCommand(cmd, "track", "inspect", audioPath)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -190,8 +222,8 @@ func TestInspectCommand(t *testing.T) {
 		t.Setenv("AGENT", "1")
 		cmd := newRootCommand()
 		out, err := executeCommand(cmd, "track", "inspect", filepath.Join(tmpDir, "nonexistent.m4a"))
-		if err != nil {
-			t.Fatalf("expected command not to return fatal error for missing file, got: %v", err)
+		if err == nil {
+			t.Fatal("expected missing file to fail the command")
 		}
 		if !strings.Contains(out, "status: error") {
 			t.Fatalf("expected status: error in agent mode, got: %s", out)
@@ -222,7 +254,7 @@ func TestUpdateCommand(t *testing.T) {
 	t.Run("agent mode update with overrides", func(t *testing.T) {
 		t.Setenv("AGENT", "1")
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "update", "-o", outDirectory, "--artist", "Override Artist", "--title", "Override Title", "--album", "Override Album", "--date", "2024", "--genre", "Minimal", audioPath)
+		out, err := executeCommand(cmd, "track", "update", "-o", outDirectory, "--artist", "Override Artist", "--title", "Override Title", "--album", "Override Album", "--date", "2024", "--genre", "Minimal", audioPath)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -290,8 +322,8 @@ func TestUpdateCommand(t *testing.T) {
 		t.Setenv("AGENT", "0")
 		cmd := newRootCommand()
 		out, err := executeCommand(cmd, filepath.Join(tmpDir, "missing.m4a"))
-		if err != nil {
-			t.Fatalf("unexpected fatal error: %v", err)
+		if err == nil {
+			t.Fatal("expected missing file to fail the command")
 		}
 		if !strings.Contains(out, "[ERROR] File not found") {
 			t.Fatalf("expected error message, got: %s", out)
@@ -462,7 +494,7 @@ func TestUpgradeCommand(t *testing.T) {
 		defer cleanup()
 
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "upgrade")
+		out, err := executeCommand(cmd, "self", "upgrade")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -479,7 +511,7 @@ func TestUpgradeCommand(t *testing.T) {
 		defer cleanup()
 
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "upgrade")
+		out, err := executeCommand(cmd, "self", "upgrade")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -496,7 +528,7 @@ func TestUpgradeCommand(t *testing.T) {
 		defer cleanup()
 
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "upgrade")
+		out, err := executeCommand(cmd, "self", "upgrade")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -513,7 +545,7 @@ func TestUpgradeCommand(t *testing.T) {
 		defer cleanup()
 
 		cmd := newRootCommand()
-		out, err := executeCommand(cmd, "upgrade")
+		out, err := executeCommand(cmd, "self", "upgrade")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -530,7 +562,7 @@ func TestUpgradeCommand(t *testing.T) {
 		defer cleanup()
 
 		cmd := newRootCommand()
-		_, err := executeCommand(cmd, "upgrade")
+		_, err := executeCommand(cmd, "self", "upgrade")
 		if err == nil {
 			t.Fatal("expected error on upgrade network failure")
 		}
@@ -543,7 +575,7 @@ func TestInspectCommand_TopLevelAlias(t *testing.T) {
 
 	t.Setenv("AGENT", "0")
 	cmd := newRootCommand()
-	out, err := executeCommand(cmd, "inspect", audioPath, "-v")
+	out, err := executeCommand(cmd, "track", "inspect", audioPath, "-v")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

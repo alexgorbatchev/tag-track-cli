@@ -150,7 +150,7 @@ func TestJSONUpdateClearedDateAndFailedDestination(t *testing.T) {
 	dir, cleanup := setupMainTestEnv(t)
 	defer cleanup()
 	file := createTestAudioFile(t, dir, "input.m4a")
-	batch, err := runTagJSON(t, "update", "--json", "--dry-run", "--artist=", "--title=", "--date=", "--genre=", file)
+	batch, err := runTagJSON(t, "track", "update", "--json", "--dry-run", "--artist=", "--title=", "--date=", "--genre=", file)
 	if err != nil || len(batch.Results) != 1 {
 		t.Fatalf("clear preview: %+v %v", batch, err)
 	}
@@ -158,7 +158,7 @@ func TestJSONUpdateClearedDateAndFailedDestination(t *testing.T) {
 	if meta == nil || meta.Artist != "" || meta.Title != "" || meta.ReleaseDate != "" || meta.ReleaseYear != "" || meta.Genre != "" {
 		t.Fatalf("explicit clears lost: %+v", meta)
 	}
-	batch, err = runTagJSON(t, "update", "--json", "--out-dir", file, file)
+	batch, err = runTagJSON(t, "track", "update", "--json", "--out-dir", file, file)
 	if err == nil || len(batch.Results) != 1 || !strings.Contains(batch.Results[0].Error, "creating output directory") {
 		t.Fatalf("destination failure lost: %+v %v", batch, err)
 	}
