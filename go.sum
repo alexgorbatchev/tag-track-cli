@@ -1,5 +1,5 @@
-github.com/alexgorbatchev/cobra-help-tree/v2 v2.2.1 h1:8140hwsSJahR8gvFjG44hVvUDBQtU0qpKJefXasI0mE=
-github.com/alexgorbatchev/cobra-help-tree/v2 v2.2.1/go.mod h1:Vm/pvT2ktLcHypR7Nbru91OvoKMBukS2cVd7QhxsSOI=
+github.com/alexgorbatchev/cobra-help-tree/v4 v4.0.0 h1:lsgP09cFsQq25htGjEYvh8ATiBE7t7R7ECfJBe01QVU=
+github.com/alexgorbatchev/cobra-help-tree/v4 v4.0.0/go.mod h1:iW2OKycMBhufRu+sBuCIqV8uwzqLfLzz24zyP65j/cY=
 github.com/alexgorbatchev/gochromaprint v1.6.1-0.20261018234412-8ac11c575443 h1:axbcL34eyi2I/V9CmxctJWarlVXOtDrk+qeFTVaRLzM=
 github.com/alexgorbatchev/gochromaprint v1.6.1-0.20261018234412-8ac11c575443/go.mod h1:G9j9lh3b5RDefxLJxR/Tvx7MZsmFDEp9B7mlqQy154w=
 github.com/alexgorbatchev/godeps v1.1.0 h1:yLaSXmqiwB50RpNwJusRwHMhnWZJV65aIfHj1a2h8xI=

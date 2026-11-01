@@ -3,7 +3,7 @@ module github.com/alexgorbatchev/tag-track-cli
 go 1.26.2
 
 require (
-	github.com/alexgorbatchev/cobra-help-tree/v2 v2.2.1
+	github.com/alexgorbatchev/cobra-help-tree/v4 v4.0.0
 	github.com/alexgorbatchev/gochromaprint v1.6.1-0.20261018234412-8ac11c575443
 	github.com/alexgorbatchev/godeps v1.1.0
 	github.com/alexgorbatchev/goshazam v0.8.1

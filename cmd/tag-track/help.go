@@ -1,11 +1,9 @@
 package main
 
 import (
-	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v2"
+	cobrahelptree "github.com/alexgorbatchev/cobra-help-tree/v4"
 	"github.com/spf13/cobra"
 )
-
-const skillCommandOutput = "Install the tag-track skill using the Skills CLI:\n\n  npx skills add alexgorbatchev/tag-track-cli --skill tag-track\n\nSkill:\n\n  https://github.com/alexgorbatchev/tag-track-cli/tree/main/skills/tag-track\n"
 
 var techCatalog = cobrahelptree.TechCatalog{
 	"tag-track": {Args: []cobrahelptree.ArgSpec{{Name: "[file...]", Description: "Audio paths, or - to read newline-delimited paths from stdin"}}, Env: []cobrahelptree.EnvSpec{
@@ -24,7 +22,7 @@ func setupHelp(cmd *cobra.Command) {
 	if err := cobrahelptree.SetupWithOptions(cmd, cobrahelptree.HelpOptions{
 		Catalog: techCatalog,
 		Tree:    cobrahelptree.TreeOptions{HideGeneratedCommands: true},
-		Skill:   skillCommandOutput,
+		Skill:   cobrahelptree.SkillSource{Repository: "alexgorbatchev/tag-track-cli", Branch: "main"},
 	}); err != nil {
 		panic(err)
 	} // Fixed options are a programmer invariant.
