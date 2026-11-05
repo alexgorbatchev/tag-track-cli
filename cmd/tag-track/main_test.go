@@ -339,6 +339,7 @@ func TestUpdateCommand(t *testing.T) {
 }
 
 func TestArtworkEmbedCommand(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	audioPath := createTestAudioFile(t, tmpDir, "EmbedTest - Song.m4a")
 
@@ -390,6 +391,7 @@ func TestArtworkEmbedCommand(t *testing.T) {
 }
 
 func TestDepsCommand(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		return []byte(name + " version 6.1.1"), nil
 	}
@@ -450,6 +452,7 @@ func TestDepsCommand(t *testing.T) {
 }
 
 func TestEnsureDependencies_Branches(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	mockRunner := func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		return nil, errors.New("missing")
 	}
@@ -570,6 +573,7 @@ func TestUpgradeCommand(t *testing.T) {
 }
 
 func TestInspectCommand_TopLevelAlias(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	audioPath := createTestAudioFile(t, tmpDir, "TopInspect.m4a")
 
@@ -585,6 +589,7 @@ func TestInspectCommand_TopLevelAlias(t *testing.T) {
 }
 
 func TestEmbedArtworkOnFiles_Errors(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	badAudio := filepath.Join(tmpDir, "bad.m4a")
 	_ = os.WriteFile(badAudio, []byte("not audio"), 0644)
@@ -605,6 +610,7 @@ func TestEmbedArtworkOnFiles_Errors(t *testing.T) {
 }
 
 func TestInspectCommand_FullTags(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	tmpDir := t.TempDir()
 	audioPath := createTestAudioFile(t, tmpDir, "FullTag - Track.m4a")
 

@@ -23,6 +23,8 @@ jobs:
       - name: Check module hygiene
         run: go mod tidy -diff
 
+      - uses: extractions/setup-just@v4
+
       - name: Build
         run: go build ./...
 
@@ -32,5 +34,18 @@ jobs:
       - name: Install audio test dependencies
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Test
-        run: go test -v ./...
+      - name: Test and verify the user cache is unchanged
+        run: |
+          cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/tag-track"
+          snapshot_cache() {
+            if [ -e "$cache_root" ]; then
+              find "$cache_root" -ls
+            fi
+          }
+          before="$(snapshot_cache)"
+          just test
+          after="$(snapshot_cache)"
+          if [ "$before" != "$after" ]; then
+            echo 'Tests modified the user tag-track cache' >&2
+            exit 1
+          fi

@@ -51,9 +51,9 @@ build:
 install:
     go install ./cmd/tag-track
 
-# Clean up build binaries and temporary files
+# Clean build outputs while preserving session-owned scratch
 clean:
-    rm -rf bin tag-track coverage.out .tmp
+    rm -rf bin tag-track coverage.out
 
 # Download project dependencies for local development
 setup:

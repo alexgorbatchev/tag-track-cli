@@ -6,15 +6,15 @@ import (
 	"encoding/json"
 	"net"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestNewReporter_UnixSocket(t *testing.T) {
-	tmpDir := t.TempDir()
-	sockPath := filepath.Join(tmpDir, "test.sock")
+	t.Chdir(t.TempDir())
+	// Relative addresses keep the socket below the OS path limit under deep TMPDIRs.
+	sockPath := "test.sock"
 
 	l, err := net.Listen("unix", sockPath)
 	if err != nil {

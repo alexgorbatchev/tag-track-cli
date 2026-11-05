@@ -65,7 +65,7 @@ func TestCommentCommandExplicitEmptyAndOmission(t *testing.T) {
 		want  string
 	}{
 		{[]string{"--comment", "Warm-up track"}, "Warm-up track"},
-		{nil, "Warm-up track | Source: local file | Metadata: Filename Fallback | Tagged: " + time.Now().Format("2006-01-02")},
+		{nil, "Warm-up track | Source: local file | Metadata: Filename Fallback | Tagged: " + time.Now().UTC().Format("2006-01-02")},
 		{[]string{"--comment="}, ""},
 	} {
 		args := append([]string{"track", "update", file, "--artist", "Test", "--title", "Track"}, tc.flags...)

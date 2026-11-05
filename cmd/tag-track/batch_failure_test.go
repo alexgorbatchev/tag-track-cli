@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alexgorbatchev/tag-track-cli/internal/display"
 )
 
 func TestBatchFailureReturnsErrorAndContinues(t *testing.T) {
@@ -27,7 +29,7 @@ func TestBatchFailureReturnsErrorAndContinues(t *testing.T) {
 			if err == nil {
 				t.Fatalf("batch containing corrupt audio succeeded: %s", out)
 			}
-			if !strings.Contains(out, good) || !strings.Contains(out, "status: error") {
+			if !strings.Contains(out, display.Path(good)) || !strings.Contains(out, "status: error") {
 				t.Fatalf("missing per-file results: %s", out)
 			}
 			if command == "inspect" && !strings.Contains(out, "codec:") {
