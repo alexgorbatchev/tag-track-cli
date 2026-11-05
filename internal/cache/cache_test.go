@@ -213,6 +213,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("enabled without xdg", func(t *testing.T) {
+		t.Setenv("HOME", t.TempDir())
 		t.Setenv("XDG_CACHE_HOME", "")
 		c, err := New(true)
 		if err != nil {
