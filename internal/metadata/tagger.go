@@ -206,8 +206,12 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		_ = os.Remove(tempOutPath)
 	}()
 
+	writes := func(tag string) bool { return metadata.WriteOnly == nil || metadata.WriteOnly[tag] }
+
 	var cleanFilename string
-	if metadata.Artist != "" && metadata.Artist != "Unknown Artist" {
+	if metadata.WriteOnly != nil {
+		cleanFilename = filepath.Base(filePath)
+	} else if metadata.Artist != "" && metadata.Artist != "Unknown Artist" {
 		cleanFilename = SanitizeFilename(fmt.Sprintf("%s - %s%s", metadata.Artist, metadata.Title, ext))
 	} else {
 		base := strings.TrimSuffix(filepath.Base(filePath), ext)
@@ -238,7 +242,7 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 	commentTag := fmt.Sprintf("Source: %s | Metadata: %s | Tagged: %s", sourceURL, metaProvider, provenanceDate)
 	if metadata.Comment != nil {
 		commentTag = *metadata.Comment
-	} else {
+	} else if writes("comment") {
 		userComment, err := resolveUserComment(ctx, filePath, nil)
 		if err != nil {
 			return filePath, err
@@ -279,13 +283,19 @@ func ApplyMetadataToLocalTrack(ctx context.Context, filePath string, metadata Tr
 		}
 	}
 
-	args = append(args, "-metadata", fmt.Sprintf("title=%s", metadata.Title))
-	args = append(args, "-metadata", fmt.Sprintf("artist=%s", metadata.Artist))
-	args = append(args, "-metadata", fmt.Sprintf("album=%s", metadata.Album))
-	args = append(args, "-metadata", fmt.Sprintf("date=%s", dateTag))
-	args = append(args, "-metadata", fmt.Sprintf("year=%s", dateTag))
-	args = append(args, "-metadata", fmt.Sprintf("genre=%s", metadata.Genre))
-	args = append(args, "-metadata", fmt.Sprintf("comment=%s", commentTag))
+	for _, tag := range []struct{ field, key, value string }{
+		{"title", "title", metadata.Title},
+		{"artist", "artist", metadata.Artist},
+		{"album", "album", metadata.Album},
+		{"date", "date", dateTag},
+		{"date", "year", dateTag},
+		{"genre", "genre", metadata.Genre},
+		{"comment", "comment", commentTag},
+	} {
+		if writes(tag.field) {
+			args = append(args, "-metadata", tag.key+"="+tag.value)
+		}
+	}
 
 	args = append(args, tempOutPath)
 

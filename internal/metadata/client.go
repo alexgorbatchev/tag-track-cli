@@ -24,18 +24,21 @@ import (
 
 // TrackMetadataResult contains normalized track metadata and artwork URL.
 type TrackMetadataResult struct {
-	Title          string    `json:"title"`
-	Artist         string    `json:"artist"`
-	Album          string    `json:"album"`
-	Genre          string    `json:"genre"`
-	Comment        *string   `json:"comment,omitempty"`
-	ReleaseDate    string    `json:"releaseDate,omitempty"`
-	ReleaseYear    string    `json:"releaseYear"`
-	CoverArtURL    string    `json:"coverArtUrl,omitempty"`
-	RequireArtwork bool      `json:"-"`
-	Source         string    `json:"source"` // AcoustID / MusicBrainz, Shazam API, iTunes API, MusicBrainz API, Filename Fallback
-	AudioSourceURL string    `json:"audioSourceUrl,omitempty"`
-	FetchedAt      time.Time `json:"fetchedAt,omitempty"`
+	Title          string  `json:"title"`
+	Artist         string  `json:"artist"`
+	Album          string  `json:"album"`
+	Genre          string  `json:"genre"`
+	Comment        *string `json:"comment,omitempty"`
+	ReleaseDate    string  `json:"releaseDate,omitempty"`
+	ReleaseYear    string  `json:"releaseYear"`
+	CoverArtURL    string  `json:"coverArtUrl,omitempty"`
+	RequireArtwork bool    `json:"-"`
+	// WriteOnly, when non-nil, limits a write to these tag names (title, artist, album, date, genre, comment).
+	// Every other tag, the embedded artwork unless CoverArtURL replaces it, and the input file name are kept.
+	WriteOnly      map[string]bool `json:"-"`
+	Source         string          `json:"source"` // AcoustID / MusicBrainz, Shazam API, iTunes API, MusicBrainz API, Filename Fallback
+	AudioSourceURL string          `json:"audioSourceUrl,omitempty"`
+	FetchedAt      time.Time       `json:"fetchedAt,omitempty"`
 }
 
 // HTTPClient interface for test mockability.

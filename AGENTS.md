@@ -1,6 +1,6 @@
 ---
 created_on: 2026-09-03 04:00
-last_modified: 2026-10-19 17:38
+last_modified: 2026-11-15 09:00
 status: current
 ---
 
@@ -30,6 +30,7 @@ Go CLI tool for inspecting, identifying, updating, and embedding normalized meta
 ## Conventions
 - **Machine API:** `--json` returns a batch with per-file results for inspect, update, and artwork embedding, including partial failures and a nonzero exit status. Dependencies and self-upgrade return structured JSON envelopes. Diagnostics go to stderr.
 - **Explicit Tag Edits:** Supplied empty tag flags clear their values. An explicit comment replaces generated provenance; artwork-only edits preserve existing comments. Explicit artwork accepts HTTP URLs or local paths and must fail if loading or normalization fails. `--refresh` bypasses metadata caches.
+- **No-Lookup Updates:** `track update --no-lookup` never identifies or contacts lookup services. It writes only supplied tag flags and leaves every other tag, the comment (no provenance), the embedded artwork unless `--artwork` replaces it, and the input filename unchanged. It refuses `--source-url`, which only records lookup provenance.
 - **Zero-Transcode Policy:** Never lossily re-encode MP3, OPUS, or FLAC streams to AAC. Always use `-c:a copy` during metadata tagging to preserve the original bitstream byte-for-byte.
 - **Filename Sanitization:** Clean output filenames (`<outDir>/<Artist> - <Title>.<ext>`). Stripped of bracket video IDs `[...]` and illegal filesystem characters.
 - **Hermetic Unit Tests:** All unit tests (`just test`) MUST remain 100% offline, hermetic, and deterministic. All HTTP network calls in tests use local mock transports, audio operations use synthetic test audio files, and zero unit tests depend on the live internet.
@@ -37,7 +38,7 @@ Go CLI tool for inspecting, identifying, updating, and embedding normalized meta
 - **Progress Envelope:** Every event includes `job_id`, increasing `sequence` (starting at 1 per reporter), UTC `timestamp`, and numeric overall `percent` from 0 to 100. Accept caller-supplied `--job-id` or generate one. For multiple files, calculate completion across the batch. When delegated by fetch-track, its parent reporter owns the outward job ID, sequence, and overall acquisition percentage.
 - **Help Screens:** CLI help output (`--help`) must display an aligned hierarchical tree view with `├─` and `╰─` glyphs powered by `github.com/alexgorbatchev/cobra-help-tree/v4`.
 - **Square Artwork Normalization:** Always ensure embedded album art is strictly 1:1 square (1400x1400) by applying center-crop and resize filters (`crop='min(iw,ih)':'min(iw,ih)',scale=1400:1400`).
-- **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD`) and embed provenance comments (`Source: ... | Metadata: ... | Tagged: ...`).
+- **Origin Date & Provenance Preservation:** Always preserve full release date (`YYYY-MM-DD`) and embed provenance comments (`Source: ... | Metadata: ... | Tagged: ...`) in identified updates.
 - **User Comments:** Preserve existing user text when `--comment` is omitted, replace it when supplied, and clear it for an explicitly empty value. When the comment is omitted, replace the generated provenance suffix rather than accumulating it.
 - **Refresh:** `--refresh` bypasses metadata/artwork cache reads and stores fresh results. `--no-cache` disables both reads and writes, including when combined with refresh. Dependency probes retain their independent cache policy. `--force` is not an alias.
 - **Self-Upgrade:** `tag-track self upgrade` checks for newer GitHub releases and upgrades in-place via `godeps.UpgradeSelf`.

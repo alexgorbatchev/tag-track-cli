@@ -54,6 +54,9 @@ tag-track track inspect "tracks/Artist - Title.m4a"
 # Update an entire collection of tracks in-place
 tag-track track update --in-place ~/Music/DJ/*.m4a
 
+# Fix one tag without an online lookup; every other tag and the file name stay as they are
+tag-track track update --no-lookup --title "Title (Extended Mix)" "tracks/Artist - Title.m4a"
+
 # Embed a specific high-resolution artwork image
 tag-track artwork embed "tracks/Artist - Title.m4a" --url "https://example.com/cover.jpg"
 
@@ -93,6 +96,7 @@ Global options are `--verbose` / `-v`, `--job-id`, and `--help` / `-h`. Root `--
 | `--source-url <url>` | | `""` | Audio source recorded in provenance |
 | `--artwork <url\|path>` | | `""` | Cover artwork image URL or local file path to embed |
 | `--refresh` | | `false` | Bypass metadata/artwork cache reads and store fresh results; `--no-cache` takes precedence and disables reads and writes |
+| `--no-lookup` | | `false` | Skip online identification: write only the tags given as flags and keep every other tag, the embedded artwork, the comment, and the file name. Cannot be combined with `--source-url` |
 | `--dry-run` | | `false` | Preview proposed metadata without modifying files on disk |
 | `--no-cache` | | `false` | Disable local caching for search queries and artwork |
 | `--progress-target <uri>` | | `""` | Target URI for streaming NDJSON progress telemetry |

@@ -4,18 +4,19 @@ description: Inspect, identify, and update audio metadata and cover artwork with
 author: alexgorbatchev
 metadata:
   created_on: 2026-10-18 09:57
-  last_modified: 2026-10-30 12:00
+  last_modified: 2026-11-15 09:00
   status: current
 ---
 
 ## Workflow
 
-Use `AGENT=1` for compact output. Inspect before changing an existing collection; preview identification with `--dry-run`, then apply the chosen overrides and destination.
+Use `AGENT=1` for compact output. Inspect before changing an existing collection; preview identification with `--dry-run`, then apply the chosen overrides and destination. To change only specific tags, add `--no-lookup`: no identification runs and every tag not given as a flag is kept.
 
 ```sh
 AGENT=1 tag-track track inspect "tracks/Artist - Title.flac"
 AGENT=1 tag-track track update --dry-run "tracks/Artist - Title.flac"
 AGENT=1 tag-track track update -o tagged --artist "Artist" --title "Title" "tracks/input.flac"
+AGENT=1 tag-track track update --no-lookup --title "Title (Extended Mix)" "tracks/Artist - Title.flac"
 AGENT=1 tag-track artwork embed --url "https://example.com/cover.jpg" "tracks/Artist - Title.flac"
 ```
 
@@ -25,7 +26,7 @@ AGENT=1 tag-track artwork embed --url "https://example.com/cover.jpg" "tracks/Ar
 | --- | --- |
 | `tag-track [file...]` | Identify and tag files; same operation as track update. With no arguments, read piped stdin or display help on a terminal. |
 | `tag-track track` | Display track command help. |
-| `tag-track track update [file...]` | Identify metadata, apply overrides, embed artwork, and write a clean Artist - Title filename. |
+| `tag-track track update [file...]` | Identify metadata, apply overrides, embed artwork, and write a clean Artist - Title filename. With `--no-lookup`, write only the supplied tags and keep the input filename. |
 | `tag-track track inspect <file...>` | Read codecs, duration, tags, and artwork dimensions without changing audio files. |
 | `tag-track artwork` | Display artwork command help. |
 | `tag-track artwork embed <file...>` | Embed the supplied image, cropped and scaled to 1400x1400. |
@@ -64,6 +65,7 @@ Root and `track update` accept the following local flags. Empty string means no 
 | `--source-url` | string | "" | Audio source recorded in provenance. |
 | `--artwork` | string | "" | HTTP image URL or local image path. Hidden alias: `--cover`. |
 | `--refresh` | bool | false | Bypass metadata/artwork cache reads and store fresh results. `--no-cache` takes precedence and disables reads and writes. |
+| `--no-lookup` | bool | false | Skip identification and network lookups. Read the file's current tags, write only the tag flags that were supplied (an empty value clears that tag), and keep every other tag, the comment, the embedded artwork unless `--artwork` replaces it, and the input filename. Results report `source: Existing tags`. Combining it with `--source-url` fails every file. |
 | `--dry-run` | bool | false | Resolve and print metadata without writing audio; network lookups and cache activity still occur. |
 | `--no-cache` | bool | false | Disable metadata and artwork caching. |
 | `--progress-target` | string | "" | NDJSON destination: unix:///path.sock, tcp://host:port, fd://3, stdout, stderr. |
@@ -80,7 +82,7 @@ Global flags: `--verbose` / `-v` (bool, default false) enables diagnostic loggin
 - `TAG_TRACK_PROGRESS_TARGET` supplies the destination after explicit progress flags. Events contain job_id, monotonically increasing sequence starting at 1, UTC timestamp, type, phase, and batch percent 0–100. Metadata and result payloads carry resolved metadata and actual paths.
 - `XDG_CACHE_HOME` selects cache storage; otherwise use the platform cache directory under tag-track. `XDG_DATA_HOME` selects the managed tool root, defaulting to ~/.local/share/tag-track/bin. `PATH` locates external tools. Platform package managers may request privileges during dependency installation.
 - Printed filesystem paths under the home directory use `~`. Audio filesystem operations and telemetry paths retain their actual paths.
-- Identification sends acoustic fingerprints to Shazam/AcoustID and metadata queries to iTunes/MusicBrainz. Artwork may download over HTTP. Audio is copied without lossy re-encoding; metadata writes can replace destination files. Temporary processing uses .tmp and cleans run-created temporary content.
+- Identification sends acoustic fingerprints to Shazam/AcoustID and metadata queries to iTunes/MusicBrainz; `--no-lookup` sends neither. Artwork may download over HTTP. Audio is copied without lossy re-encoding; metadata writes can replace destination files. Temporary processing uses .tmp and cleans run-created temporary content.
 - Per-file inspection, tagging, and artwork failures print errors and continue with the remaining files, then exit 1 if any file failed. Check every file's result for partial success. Command/dependency failures exit 1; interruption exits 130. Failed progress connection setup is best-effort and does not stop tagging.
 
 

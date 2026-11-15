@@ -37,6 +37,7 @@ var (
 	artworkFlag    string
 	sourceURLFlag  string
 	refreshFlag    bool
+	noLookupFlag   bool
 	dryRunFlag     bool
 	noCache        bool
 	verbose        bool
@@ -47,6 +48,14 @@ var (
 
 	stdinReader = io.Reader(os.Stdin)
 )
+
+const (
+	noLookupUsage      = "Skip online identification: write only the tags given as flags and keep every other tag, the embedded artwork, the comment, and the file name"
+	existingTagsSource = "Existing tags"
+)
+
+// explicitTagNames are the tag flags a no-lookup update writes when, and only when, they are supplied.
+var explicitTagNames = []string{"title", "artist", "album", "date", "genre", "comment"}
 
 func newRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
@@ -98,6 +107,7 @@ Tags and artwork are embedded with byte-for-byte stream preservation (-c:a copy)
 	rootCmd.Flags().StringVar(&artworkFlag, "cover", "", "Alias for --artwork")
 	_ = rootCmd.Flags().MarkHidden("cover")
 	rootCmd.Flags().BoolVar(&refreshFlag, "refresh", false, "Fetch fresh metadata and artwork and update cached results")
+	rootCmd.Flags().BoolVar(&noLookupFlag, "no-lookup", false, noLookupUsage)
 	rootCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Preview proposed metadata without modifying files on disk")
 	rootCmd.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output logging")
@@ -363,6 +373,7 @@ func copyFlags(src, dst *cobra.Command) {
 	dst.Flags().StringVar(&artworkFlag, "cover", "", "Alias for --artwork")
 	_ = dst.Flags().MarkHidden("cover")
 	dst.Flags().BoolVar(&refreshFlag, "refresh", false, "Fetch fresh metadata and artwork and update cached results")
+	dst.Flags().BoolVar(&noLookupFlag, "no-lookup", false, noLookupUsage)
 	dst.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Preview proposed metadata without modifying files on disk")
 	dst.Flags().BoolVar(&noCache, "no-cache", false, "Disable local caching for search queries, metadata, and artwork")
 	dst.Flags().StringVar(&progressTarget, "progress-target", "", "Target URI/address for streaming JSON progress events")
@@ -658,6 +669,9 @@ func changedTagFlags(cmd *cobra.Command) map[string]bool {
 }
 
 func processFiles(ctx context.Context, files []string, changed map[string]bool) error {
+	if noLookupFlag && changed["source-url"] {
+		return fileCommandFailure(files, errors.New("--source-url records lookup provenance and cannot be combined with --no-lookup"))
+	}
 	batch := tagBatch{Status: "success", Results: []tagResult{}}
 	isAgent := deps.IsAgentMode() || jsonOutput
 	cacheInst, _ := cache.New(!noCache)
@@ -698,43 +712,40 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 		}
 
 		if rep != nil {
+			message := fmt.Sprintf("identifying track metadata for %s", filepath.Base(file))
+			if noLookupFlag {
+				message = fmt.Sprintf("reading existing tags for %s", filepath.Base(file))
+			}
 			_ = rep.Emit(progress.Event{
 				Type:       progress.EventPhaseStart,
 				Phase:      "identify",
 				Step:       i + 1,
 				TotalSteps: len(files),
-				Message:    fmt.Sprintf("identifying track metadata for %s", filepath.Base(file)),
+				Message:    message,
 			})
 		}
 
-		var sp *spinner.Spinner
-		if !isAgent && !verbose {
-			sp = spinner.New(fmt.Sprintf("working... identifying %s", filepath.Base(file)))
-			sp.Start()
-		}
-
-		baseName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
-		cleanSearch := metadata.SanitizeFilename(baseName)
-
-		rawArtist := artistFlag
-		rawTitle := titleFlag
-		if rawArtist == "" && rawTitle == "" && strings.Contains(cleanSearch, " - ") {
-			parts := strings.SplitN(cleanSearch, " - ", 2)
-			rawArtist = strings.TrimSpace(parts[0])
-			rawTitle = strings.TrimSpace(parts[1])
-		}
-
-		metaRes, err := client.ResolveTrackMetadataFallback(ctx, file, cleanSearch, rawArtist, rawTitle, verbose)
-		if sp != nil {
-			sp.Stop()
-		}
-
-		if err != nil || metaRes == nil {
-			metaRes = &metadata.TrackMetadataResult{
-				Title:  cleanSearch,
-				Artist: "Unknown Artist",
-				Source: "Filename Fallback",
+		var metaRes *metadata.TrackMetadataResult
+		if noLookupFlag {
+			existing, err := metadata.InspectAudioTrack(ctx, file, nil)
+			if err != nil {
+				err = fmt.Errorf("reading existing tags: %w", err)
+				if jsonOutput {
+					batch.Results = append(batch.Results, tagResult{InputFile: file, Status: "error", Error: err.Error()})
+					continue
+				}
+				failures = append(failures, fmt.Errorf("tagging %s: %w", display.Path(file), err))
+				_ = rep.Emit(progress.Event{Type: progress.EventError, Phase: "identify", Step: i + 1, TotalSteps: len(files), Error: err.Error()})
+				if isAgent {
+					display.Printf("file: %s\nstatus: error\nerror: %v\n", display.Path(file), err)
+				} else {
+					display.Printf("[ERROR] Tagging %s: %v\n", display.Path(file), err)
+				}
+				continue
 			}
+			metaRes = existingTagMetadata(existing)
+		} else {
+			metaRes = identifyTrack(ctx, client, file, isAgent)
 		}
 
 		// Apply manual overrides if specified via flags
@@ -766,6 +777,13 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 		}
 		if sourceURLFlag != "" {
 			metaRes.AudioSourceURL = sourceURLFlag
+		}
+		if noLookupFlag {
+			for _, name := range explicitTagNames {
+				if changed[name] {
+					metaRes.WriteOnly[name] = true
+				}
+			}
 		}
 
 		if rep != nil {
@@ -884,7 +902,9 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 			display.Printf("source: %s\n", metaRes.Source)
 			display.Printf("output: %s\n", display.Path(taggedPath))
 		} else {
-			if metaRes.Title != "" {
+			if noLookupFlag {
+				display.Printf("  - edited: %s\n", editedTagList(metaRes))
+			} else if metaRes.Title != "" {
 				display.Printf("  - matched: \"%s - %s\" (%s, %s)\n", metaRes.Artist, metaRes.Title, metaRes.Album, metaRes.ReleaseYear)
 				display.Printf("  - source: %s\n", metaRes.Source)
 			}
@@ -896,6 +916,75 @@ func processFiles(ctx context.Context, files []string, changed map[string]bool) 
 		return batch.write()
 	}
 	return errors.Join(failures...)
+}
+
+// identifyTrack runs the online identification chain, falling back to the cleaned file name.
+func identifyTrack(ctx context.Context, client *metadata.Client, file string, isAgent bool) *metadata.TrackMetadataResult {
+	var sp *spinner.Spinner
+	if !isAgent && !verbose {
+		sp = spinner.New(fmt.Sprintf("working... identifying %s", filepath.Base(file)))
+		sp.Start()
+	}
+
+	baseName := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+	cleanSearch := metadata.SanitizeFilename(baseName)
+
+	rawArtist := artistFlag
+	rawTitle := titleFlag
+	if rawArtist == "" && rawTitle == "" && strings.Contains(cleanSearch, " - ") {
+		parts := strings.SplitN(cleanSearch, " - ", 2)
+		rawArtist = strings.TrimSpace(parts[0])
+		rawTitle = strings.TrimSpace(parts[1])
+	}
+
+	metaRes, err := client.ResolveTrackMetadataFallback(ctx, file, cleanSearch, rawArtist, rawTitle, verbose)
+	if sp != nil {
+		sp.Stop()
+	}
+	if err != nil || metaRes == nil {
+		return &metadata.TrackMetadataResult{
+			Title:  cleanSearch,
+			Artist: "Unknown Artist",
+			Source: "Filename Fallback",
+		}
+	}
+	return metaRes
+}
+
+// existingTagMetadata seeds a no-lookup update with the file's current tags; only explicit flags change them.
+func existingTagMetadata(info *metadata.TrackInspection) *metadata.TrackMetadataResult {
+	comment := info.Comment
+	year := ""
+	if len(info.Date) >= 4 {
+		year = info.Date[:4]
+	}
+	return &metadata.TrackMetadataResult{
+		Title:       info.Title,
+		Artist:      info.Artist,
+		Album:       info.Album,
+		Genre:       info.Genre,
+		Comment:     &comment,
+		ReleaseDate: info.Date,
+		ReleaseYear: year,
+		Source:      existingTagsSource,
+		WriteOnly:   map[string]bool{},
+	}
+}
+
+func editedTagList(meta *metadata.TrackMetadataResult) string {
+	var names []string
+	for _, name := range explicitTagNames {
+		if meta.WriteOnly[name] {
+			names = append(names, name)
+		}
+	}
+	if meta.CoverArtURL != "" {
+		names = append(names, "artwork")
+	}
+	if len(names) == 0 {
+		return "no tags"
+	}
+	return strings.Join(names, ", ")
 }
 
 func main() {
